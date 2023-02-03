@@ -1,0 +1,30 @@
+name: build-windows
+on:
+  pull_request:
+  push:
+jobs:
+  build-windows:
+    name: build-windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: >-
+            base-devel
+            mingw-w64-x86_64-arm-none-eabi-gcc
+            git
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Build project
+        id: build-project
+        shell: msys2 {0}
+        run: |
+          make

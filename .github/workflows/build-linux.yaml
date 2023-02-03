@@ -1,0 +1,39 @@
+name: build-linux
+permissions: write-all
+on:
+  pull_request:
+  push:
+jobs:
+  build-linux:
+    name: build-linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Install dependencies (ubuntu)
+        id: install-deps-ubuntu
+        run: |
+          sudo apt-get install -y gcc-arm-none-eabi
+
+      - name: Build project
+        id: build-project
+        run: |
+          make
+
+      - name: Get short SHA
+        id: short-sha
+        run: |
+          echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Release project
+        id: release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: Proteus.s19
+          asset_name: proteus.s19
+          tag: ${{ github.ref }}-${{ steps.short-sha.outputs.sha }}
+          overwrite: true

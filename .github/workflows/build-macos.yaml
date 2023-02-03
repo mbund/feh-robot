@@ -1,22 +1,21 @@
-name: build
+name: build-macos
 on:
   pull_request:
   push:
 jobs:
-  build:
-    name: build
-    runs-on: ${{ matrix.config.os }}
-    strategy:
-      matrix:
-        config:
-          - os: ubuntu-latest
-          - os: macos-latest
-          - os: windows-latest
+  build-macos:
+    name: build-macos
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
         with:
           submodules: true
+
+      - name: Install dependencies
+        id: install-deps-macos
+        run: |
+          brew install armmbed/formulae/arm-none-eabi-gcc
 
       - name: Build project
         id: build-project

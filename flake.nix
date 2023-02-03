@@ -16,6 +16,7 @@
         buildInputs = with pkgs; [
           gcc-arm-embedded
           glibc_multi
+          doxygen
         ];
         installPhase = ''
           mkdir -p $out

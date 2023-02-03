@@ -8,9 +8,9 @@
 #include <FEHSD.h>
 #include <FEHServo.h>
 #include <FEHUtility.h>
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 
-int main() {
+auto main() -> int {
     LCD.Clear(WHITE);
 }
