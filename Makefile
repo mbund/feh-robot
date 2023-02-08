@@ -1,4 +1,3 @@
-FEHSD_DEVICE=/dev/sda1
 TARGET=Proteus
 export TARGET
 
@@ -9,17 +8,15 @@ clean:
 	$(MAKE) -C fehproteusfirmware clean
 
 ifeq ($(OS),Windows_NT)
-deploy:
+deploy: build
 	$(MAKE) -C fehproteusfirmware deploy
 else
 UNAME_S := $(shell uname -s)
-deploy:
+deploy: build
 ifeq ($(UNAME_S),Darwin)
 	$(MAKE) -C fehproteusfirmware deploy
 else
-	sudo mkdir -p /media/FEHSD
-	sudo mount $(FEHSD_DEVICE) /media/FEHSD
-	sudo cp *.s19 /media/FEHSD/CODE.S1
-	sudo umount $(FEHSD_DEVICE)	
+	sudo cp $(TARGET).s19 $(SD_PATH)/CODE.S19
+	sudo umount $(SD_PATH)
 endif
 endif
