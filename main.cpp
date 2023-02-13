@@ -190,14 +190,14 @@ Timeline::Timeline(Ts&&... ts)
     : steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
 
 auto Timeline::timestep(double t) -> bool {
-    bool running = current_step_index < steps.size();
+    if (current_step_index >= steps.size())
+        return false;
 
     auto& step = steps[current_step_index];
-    if (running && step->execute(t)) {
+    if (step->execute(t))
         current_step_index++;
-    }
 
-    return running;
+    return true;
 }
 
 /// Main function which is the entrypoint for the entire program
