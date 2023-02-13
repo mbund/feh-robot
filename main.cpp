@@ -5,6 +5,8 @@
 #include <FEHLCD.h>
 #include <FEHMotor.h>
 #include <FEHUtility.h>
+
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <vector>
@@ -14,6 +16,7 @@ const auto LCD_HEIGHT = 240;
 int touchX, touchY;
 bool touchPressed;
 
+/// Wrapper for the FEHMotor class
 class Motor {
    public:
     /// Constructor for the Motor class
@@ -28,118 +31,193 @@ class Motor {
     double correction_factor;
 };
 
-struct Step {
+/// Base class for all steps
+class Step {
+   public:
     /// Constructor for the Step class
-    /// @param t_start The time at which the step starts
-    /// @param t_end The time at which the step ends
-    Step(double t_start, double t_end);
+    Step();
 
     /// Executes the step
-    virtual auto action() const -> void;
+    /// @param t The current time
+    /// @return Whether the step is done
+    virtual auto execute(double t) -> bool;
 
     /// The time at which the step starts
     double t_start;
-
-    /// The time at which the step ends
-    double t_end;
 };
 
-Step::Step(double t_start, double t_end) : t_start(t_start), t_end(t_end) {}
-auto Step::action() const -> void {}
+Step::Step() : t_start(-1) {}
 
-struct TranslateStep : public Step {
+auto Step::execute(double t) -> bool {
+    if (t_start < 0)
+        t_start = t;
+
+    return true;
+}
+
+/// Translates the robot for a given duration at a given heading
+class TranslateStep : public Step {
    public:
-    TranslateStep(double t_start, double t_end, double heading);
-    auto action() const -> void override;
+    /// Translate (move) the robot for a given duration at a given heading
+    TranslateStep(double duration, double heading);
+
+    /// Execute the translation step
+    auto execute(double t) -> bool override;
 
    private:
     double heading;
+    double duration;
 };
 
-TranslateStep::TranslateStep(double t_start, double t_end, double heading)
-    : Step(t_start, t_end), heading(heading) {}
+TranslateStep::TranslateStep(double duration, double heading)
+    : Step(), duration(duration), heading(heading) {}
 
-auto TranslateStep::action() const -> void {}
+auto TranslateStep::execute(double t) -> bool {
+    Step::execute(t);
+    LCD.WriteAt("Translate step", 0, 0);
 
-struct EndStep : public Step {
+    return t >= t_start + duration;
+}
+
+/// Ends the program
+class EndStep : public Step {
    public:
-    EndStep(double t);
-    auto action() const -> void override;
+    /// Constructor to make a step that ends the program
+    EndStep();
+
+    /// Execute the end step
+    auto execute(double t) -> bool override;
 };
-EndStep::EndStep(double t) : Step(t, t + 1) {}
-auto EndStep::action() const -> void { exit(1); }
 
-struct RotateStep : public Step {
+EndStep::EndStep() : Step() {}
+
+auto EndStep::execute(double t) -> bool {
+    LCD.WriteAt("End step", 0, 0);
+
+    return true;
+}
+
+/// Rotate the robot for a given duration by a given angle
+class RotateStep : public Step {
    public:
-    RotateStep(double t_start, double t_end, double theta);
-    auto action() const -> void override;
+    /// Rotate the robot for a given duration by a given angle
+    /// @param duration The duration of the rotation
+    /// @param theta The angle to rotate by
+    RotateStep(double duration, double theta);
+
+    /// Execute the rotation step
+    auto execute(double t) -> bool override;
 
    private:
     double theta;
+    double duration;
 };
 
-RotateStep::RotateStep(double t_start, double t_end, double theta)
-    : Step(t_start, t_end), theta(theta) {}
+RotateStep::RotateStep(double duration, double theta)
+    : Step(), duration(duration), theta(theta) {}
 
-auto RotateStep::action() const -> void {}
+auto RotateStep::execute(double t) -> bool {
+    Step::execute(t);
+    LCD.WriteAt("Rotate step", 0, 0);
+
+    return t >= t_start + duration;
+}
 
 template <typename T, typename... Ts>
-std::unique_ptr<T> make_unique(Ts&&... args) {
-    return std::unique_ptr<T>(new T{std::forward<Ts>(args)...});
+std::shared_ptr<T> make_shared(Ts&&... ts) {
+    return std::shared_ptr<T>(new T{std::forward<Ts>(ts)...});
 }
 
 template <typename Base, typename... Ts>
-std::vector<std::unique_ptr<Base>> make_vector_of_unique(Ts&&... ts) {
-    std::unique_ptr<Base> init[] = {make_unique<Ts>(std::forward<Ts>(ts))...};
-    return std::vector<std::unique_ptr<Base>>{
+std::vector<std::shared_ptr<Base>> make_vector_of_shared(Ts&&... ts) {
+    std::shared_ptr<Base> init[] = {make_shared<Ts>(std::forward<Ts>(ts))...};
+    return std::vector<std::shared_ptr<Base>>{
         std::make_move_iterator(std::begin(init)),
         std::make_move_iterator(std::end(init))};
 }
 
-class Timeline {
+/// Execute a set of steps in parallel
+class UnionStep : public Step {
    public:
+    /// Constructor for a union step
+    /// @param ts The steps to execute in parallel
     template <typename... Ts>
-    Timeline(Ts&&... t);
+    UnionStep(Ts&&... ts);
 
-    void execute(double t);
+    /// Execute the union step
+    auto execute(double t) -> bool override;
 
    private:
-    const std::vector<std::unique_ptr<Step>> steps;
+    std::vector<std::shared_ptr<Step>> steps;
 };
 
 template <typename... Ts>
-Timeline::Timeline(Ts&&... t)
-    : steps(make_vector_of_unique<Step>(std::forward<Ts>(t)...)) {}
+UnionStep::UnionStep(Ts&&... ts)
+    : Step(), steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
 
-auto Timeline::execute(double t) -> void {
-    for (const auto& step : steps) {
-        if (t >= step->t_start && t <= step->t_end) {
-            step->action();
-        }
+auto UnionStep::execute(double t) -> bool {
+    Step::execute(t);
+
+    // iterate through steps and remove them once they are done
+    steps.erase(
+        std::remove_if(steps.begin(),
+                       steps.end(),
+                       [&t](const auto& step) { return step->execute(t); }),
+        steps.end());
+
+    return steps.size() == 0;
+}
+
+/// Sequence of steps to execute
+class Timeline {
+   public:
+    /// Constructor for the Timeline
+    /// @param ts The steps to execute in order
+    template <typename... Ts>
+    Timeline(Ts&&... ts);
+
+    /// Execute the timeline
+    /// @param t The current time
+    auto timestep(double t) -> bool;
+
+   private:
+    const std::vector<std::shared_ptr<Step>> steps;
+    size_t current_step_index = 0;
+};
+
+template <typename... Ts>
+Timeline::Timeline(Ts&&... ts)
+    : steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
+
+auto Timeline::timestep(double t) -> bool {
+    bool running = current_step_index < steps.size();
+
+    auto& step = steps[current_step_index];
+    if (running && step->execute(t)) {
+        current_step_index++;
     }
+
+    return running;
 }
 
 /// Main function which is the entrypoint for the entire program
 auto main() -> int {
     Timeline timeline{
-        TranslateStep(0, 1, 90),
-        RotateStep(1, 2, 90),
-        TranslateStep(2, 3, 90),
-        RotateStep(3, 4, 90),
-        EndStep(4),
+        TranslateStep(1, 90),
+        UnionStep(RotateStep(1, 90), TranslateStep(3, 90)),
+        RotateStep(1, 90),
+        EndStep(),
     };
 
     // Main loop
 
     auto t = 0.0;
-    auto dt = 0.01;
-
     auto start_time = TimeNow();
 
-    while (true) {
+    auto running = true;
+    while (running) {
         t = TimeNow() - start_time;
-
         touchPressed = LCD.Touch(&touchX, &touchY);
-        timeline.execute(t);
+        running = timeline.timestep(t);
     }
 }
