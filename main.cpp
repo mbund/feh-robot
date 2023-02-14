@@ -21,6 +21,15 @@ const auto FONT_HEIGHT = 17;
 float touchX, touchY;
 bool touchPressed;
 
+/// Helper function to clamp a value between a lower and upper bound
+/// @param n The value to clamp
+/// @param lower The lower bound
+/// @param upper The upper bound
+template <typename T>
+T clamp(const T& n, const T& lower, const T& upper) {
+    return std::max(lower, std::min(n, upper));
+}
+
 /// Wrapper for the FEHMotor class
 class Motor {
    public:
@@ -40,7 +49,7 @@ Motor::Motor(FEHMotor::FEHMotorPort port, double correction_factor)
     : motor(port, 9.0), correction_factor(correction_factor) {}
 
 void Motor::drive(double power) {
-    auto percent = std::clamp(power * correction_factor, -1.0, 1.0);
+    auto percent = clamp(power * correction_factor, -1.0, 1.0);
     motor.SetPercent(percent * 100.0);
 }
 
