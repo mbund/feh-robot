@@ -29,7 +29,7 @@ class Motor {
 
     /// Sets the power of the motor
     /// @param power The power to set the motor to between -1 and 1
-    auto drive(double power) -> void;
+    void drive(double power);
 
    private:
     FEHMotor motor;
@@ -39,7 +39,7 @@ class Motor {
 Motor::Motor(FEHMotor::FEHMotorPort port, double correction_factor)
     : motor(port, 9.0), correction_factor(correction_factor) {}
 
-auto Motor::drive(double power) -> void {
+void Motor::drive(double power) {
     auto percent = std::clamp(power * correction_factor, -1.0, 1.0);
     motor.SetPercent(percent * 100.0);
 }
@@ -53,7 +53,7 @@ class Step {
     /// Executes the step
     /// @param t The current time
     /// @return Whether the step is done
-    virtual auto execute(double t) -> bool;
+    virtual bool execute(double t);
 
     /// The name of the step
     std::string name;
@@ -64,7 +64,7 @@ class Step {
 
 Step::Step(std::string name) : t_start(-1), name(name) {}
 
-auto Step::execute(double t) -> bool {
+bool Step::execute(double t) {
     if (t_start < 0)
         t_start = t;
 
@@ -81,7 +81,7 @@ class TranslateStep : public Step {
     TranslateStep(std::string name, double duration, double heading);
 
     /// Execute the translation step
-    auto execute(double t) -> bool override;
+    bool execute(double t) override;
 
    private:
     double heading;
@@ -91,7 +91,7 @@ class TranslateStep : public Step {
 TranslateStep::TranslateStep(std::string name, double duration, double heading)
     : Step(name), duration(duration), heading(heading) {}
 
-auto TranslateStep::execute(double t) -> bool {
+bool TranslateStep::execute(double t) {
     Step::execute(t);
     LCD.SetFontColor(WHITE);
     LCD.WriteAt("Translate step", 0, 0);
@@ -106,12 +106,12 @@ class EndStep : public Step {
     EndStep();
 
     /// Execute the end step
-    auto execute(double t) -> bool override;
+    bool execute(double t) override;
 };
 
 EndStep::EndStep() : Step("End") {}
 
-auto EndStep::execute(double t) -> bool {
+bool EndStep::execute(double t) {
     LCD.SetFontColor(WHITE);
     LCD.WriteAt("End step", 0, 0);
 
@@ -128,7 +128,7 @@ class RotateStep : public Step {
     RotateStep(std::string name, double duration, double theta);
 
     /// Execute the rotation step
-    auto execute(double t) -> bool override;
+    bool execute(double t) override;
 
    private:
     double theta;
@@ -138,7 +138,7 @@ class RotateStep : public Step {
 RotateStep::RotateStep(std::string name, double duration, double theta)
     : Step(name), duration(duration), theta(theta) {}
 
-auto RotateStep::execute(double t) -> bool {
+bool RotateStep::execute(double t) {
     Step::execute(t);
     LCD.SetFontColor(WHITE);
     LCD.WriteAt("Rotate step", 0, 0);
@@ -169,7 +169,7 @@ class UnionStep : public Step {
     UnionStep(std::string name, Ts&&... ts);
 
     /// Execute the union step
-    auto execute(double t) -> bool override;
+    bool execute(double t) override;
 
    private:
     std::vector<std::shared_ptr<Step>> steps;
@@ -179,7 +179,7 @@ template <typename... Ts>
 UnionStep::UnionStep(std::string name, Ts&&... ts)
     : Step(name), steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
 
-auto UnionStep::execute(double t) -> bool {
+bool UnionStep::execute(double t) {
     Step::execute(t);
 
     // iterate through steps and remove them once they are done
@@ -230,7 +230,7 @@ class TouchableRegion {
         std::function<void()> on_button_exit = []() {});
 
     /// Checks the touch sensor and updates the state of the button
-    auto update() -> void;
+    void update();
 
     /// The rectangle that represents the region
     Rect rect;
@@ -260,7 +260,7 @@ TouchableRegion::TouchableRegion(Rect rect,
       on_button_enter(on_button_enter),
       on_button_exit(on_button_exit) {}
 
-auto TouchableRegion::update() -> void {
+void TouchableRegion::update() {
     float y_offset = -4;  // our Proteus innacurately reports touch location, so
                           // we must account for it
 
@@ -288,10 +288,10 @@ class Timeline {
     /// Execute the timeline
     /// @param t The current time
     /// @return True if the timeline is finished executing
-    auto timestep(double t) -> bool;
+    bool timestep(double t);
 
     /// Update the timeline UI
-    auto update() -> void;
+    void update();
 
    private:
     /// The steps to execute
@@ -338,7 +338,7 @@ Timeline::Timeline(Ts&&... ts)
     }
 }
 
-auto Timeline::timestep(double t) -> bool {
+bool Timeline::timestep(double t) {
     if (current_step_index >= steps.size())
         return false;
 
@@ -349,13 +349,13 @@ auto Timeline::timestep(double t) -> bool {
     return true;
 }
 
-auto Timeline::update() -> void {
+void Timeline::update() {
     for (auto& region : regions)
         region.update();
 }
 
 /// Main function which is the entrypoint for the entire program
-auto main() -> int {
+int main() {
     LCD.Clear(BLACK);
     LCD.SetFontColor(WHITE);
 
