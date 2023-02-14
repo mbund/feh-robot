@@ -34,6 +34,8 @@ T clamp(const T& n, const T& lower, const T& upper) {
 class Motor {
    public:
     /// Constructor for the Motor class
+    /// @param port The port to use for the motor
+    /// @param correction_factor The correction factor to use for the motor
     Motor(FEHMotor::FEHMotorPort port, double correction_factor);
 
     /// Sets the power of the motor
@@ -57,6 +59,7 @@ void Motor::drive(double power) {
 class Step {
    public:
     /// Constructor for the Step class
+    /// @param name The name of the step (for debugging)
     Step(std::string name);
 
     /// Executes the step
