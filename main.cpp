@@ -158,6 +158,30 @@ bool RotateStep::execute(double t) {
     return t >= t_start + duration;
 }
 
+/// Sleeps for a given duration
+class SleepStep : public Step {
+   public:
+    /// Sleeps for a given duration
+    /// @param name The name of the step
+    /// @param duration The duration of the rotation
+    SleepStep(std::string name, double duration);
+
+    /// Execute the rotation step
+    bool execute(double t) override;
+
+   private:
+    double duration;
+};
+
+SleepStep::SleepStep(std::string name, double duration)
+    : Step(name), duration(duration) {}
+
+bool SleepStep::execute(double t) {
+    Step::execute(t);
+
+    return t >= t_start + duration;
+}
+
 template <typename T, typename... Ts>
 std::shared_ptr<T> make_shared(Ts&&... ts) {
     return std::shared_ptr<T>(new T{std::forward<Ts>(ts)...});
@@ -373,6 +397,7 @@ int main() {
 
     Timeline timeline{
         TranslateStep("Initial move", 1, 90),
+        SleepStep("Sleep", 1),
         UnionStep("Union",
                   RotateStep("Second rotate", 1, 90),
                   TranslateStep("Second move", 3, 90)),
