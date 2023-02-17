@@ -3,9 +3,10 @@
 /// @brief Contains the entrypoint for the program
 
 #include <FEHLCD.h>
-// #include <FEHMotor.h>
 #include <FEHUtility.h>
 #include <LCDColors.h>
+// #include <FEHMotor.h>
+// #include <FEHBattery.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -15,6 +16,13 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
+// forward declarations
+class Timeline;
+class TimelineUI;
+class UIWindow;
+class Navbar;
+struct Rect;
 
 const auto TOUCH_OFFSET_Y = -4;  // our Proteus innacurately reports touch
                                  // location, so we must account for it
@@ -26,11 +34,28 @@ const auto FONT_HEIGHT = 17;
 float touchX, touchY;
 bool touchPressed;
 
-#define LOG_INFO(x)                                                  \
-    do {                                                             \
-        std::stringstream ss;                                        \
-        ss << "[i:" << __FUNCTION__ << ":" << __LINE__ << "] " << x; \
-        logger->info(ss.str());                                      \
+inline std::string method_name(const std::string& pretty_function) {
+    size_t colons = pretty_function.find("::");
+    size_t begin = pretty_function.substr(0, colons).rfind(" ") + 1;
+    size_t end = pretty_function.rfind("(") - begin;
+
+    return pretty_function.substr(begin, end);
+}
+
+#define __METHOD_NAME__ method_name(__PRETTY_FUNCTION__)
+
+#define LOG_INFO(x)                         \
+    do {                                    \
+        std::stringstream ss;               \
+        ss << "i" << __LINE__ << "| " << x; \
+        logger->info(ss.str());             \
+    } while (0)
+
+#define LOG_INFO_LONG(x)                                                \
+    do {                                                                \
+        std::stringstream ss;                                           \
+        ss << "[i:" << __METHOD_NAME__ << ":" << __LINE__ << "] " << x; \
+        logger->info(ss.str());                                         \
     } while (0)
 
 /// Helper function to clamp a value between a lower and upper bound
@@ -49,43 +74,20 @@ class Log {
 
     void info(std::string message);
 
+    friend class LogUI;
+
    private:
     std::vector<std::string> messages;
 };
 
 Log::Log() {}
+
 void Log::info(std::string message) {
     // std::cout << message << "\n";
     messages.push_back(message);
 }
 
 auto logger = std::make_shared<Log>();
-
-// /// Wrapper for the FEHMotor class
-// class Motor {
-//   public:
-//     /// Constructor for the Motor class
-//     /// @param port The port to use for the motor
-//     /// @param correction_factor The correction factor to use for the motor
-//     Motor(FEHMotor::FEHMotorPort port, double correction_factor);
-
-//     /// Sets the power of the motor
-//     /// @param power The power to set the motor to between -1 and 1
-//     void drive(double power);
-
-//   private:
-//     FEHMotor motor;
-//     double correction_factor;
-// };
-
-// Motor::Motor(FEHMotor::FEHMotorPort port, double correction_factor)
-//     : motor(port, 9.0), correction_factor(correction_factor) {
-// }
-
-// void Motor::drive(double power) {
-//     auto percent = clamp(power * correction_factor, -1.0, 1.0);
-//     motor.SetPercent(percent * 100.0);
-// }
 
 /// Base class for all steps
 class Step {
@@ -180,9 +182,9 @@ RotateStep::RotateStep(std::string name, double duration, double theta)
     : Step(name), duration(duration), theta(theta) {}
 
 bool RotateStep::execute(double t) {
-    if (t >= t_start + duration) {
-        LOG_INFO("rotate step done");
-    }
+    // if (t >= t_start + duration) {
+    //     LOG_INFO("rotate step done");
+    // }
 
     return t >= t_start + duration;
 }
@@ -284,6 +286,23 @@ struct Rect {
     unsigned int height;
 };
 
+class UIWindow {
+   public:
+    /// Constructor for the UIWindow class
+    UIWindow(Rect bounds);
+
+    /// Initial bulk render of the window (full re-render)
+    virtual void render() = 0;
+
+    /// Inject updates to the UI
+    virtual void update(double t) = 0;
+
+   protected:
+    Rect bounds;
+};
+
+UIWindow::UIWindow(Rect bounds) : bounds(bounds) {}
+
 class TouchableRegion {
    public:
     /// Constructor for a touchable region
@@ -340,100 +359,8 @@ void TouchableRegion::update() {
     }
 }
 
-/// Sequence of steps to execute
-class Timeline {
-   public:
-    /// Constructor for the Timeline
-    /// @param ts The steps to execute in order
-    template <typename... Ts>
-    Timeline(Ts&&... ts);
-
-    /// Execute the timeline
-    /// @param t The current time
-    /// @return True if the timeline is finished executing
-    bool timestep(double t);
-
-    void draw(Rect working_area);
-
-    /// Update the timeline UI
-    void update(Rect working_area, double t);
-
-   private:
-    /// The steps to execute
-    const std::vector<std::shared_ptr<Step>> steps;
-
-    /// The UI regions which can be touched
-    std::vector<TouchableRegion> regions;
-
-    /// The index of the current step
-    size_t current_step_index = 0;
-};
-
-template <typename... Ts>
-Timeline::Timeline(Ts&&... ts)
-    : steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
-
-void Timeline::draw(Rect working_area) {
-    Rect block =
-        Rect(1, working_area.y, working_area.width - 1, FONT_HEIGHT * 2 + 2);
-    for (const auto& step : steps) {
-        LCD.SetFontColor(WHITE);
-        LCD.SetBackgroundColor(BLACK);
-        LCD.DrawRectangle(block.x, block.y, block.width, block.height);
-        LCD.WriteAt(step->name.c_str(), block.x + 1, block.y + 2);
-        LCD.WriteAt("t=", block.x + 1, block.y + 2 + FONT_HEIGHT);
-
-        block.y += block.height;
-    }
-}
-
-void Timeline::update(Rect working_area, double t) {
-    for (auto& region : regions)
-        region.update();
-
-    if (current_step_index >= steps.size())
-        return;
-
-    Rect block =
-        Rect(1,
-             working_area.y + (FONT_HEIGHT * 2 + 2) * current_step_index,
-             working_area.width - 1,
-             FONT_HEIGHT * 2 + 2);
-    auto& step = steps[current_step_index];
-    // LCD.SetFontColor(BLACK);
-    // LCD.FillRectangle(block.x + 1 + (FONT_WIDTH * 2), block.y + 2 +
-    // FONT_HEIGHT,
-    //                   FONT_WIDTH * 5, FONT_HEIGHT - 1);
-
-    LCD.SetFontColor(WHITE);
-    LCD.SetBackgroundColor(BLACK);
-    LCD.WriteAt(t - step->t_start,
-                block.x + 1 + (FONT_WIDTH * 2),
-                block.y + 2 + FONT_HEIGHT);
-}
-
-bool Timeline::timestep(double t) {
-    if (current_step_index >= steps.size())
-        return false;
-
-    auto& step = steps[current_step_index];
-    if (step->execute(t)) {
-        step->t_end = t;
-        current_step_index++;
-
-        if (current_step_index < steps.size()) {
-            auto& next_step = steps[current_step_index];
-            next_step->t_start = t;
-        } else {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-struct TopBarButton {
-    TopBarButton(Rect bounding_box,
+struct NavbarButton {
+    NavbarButton(Rect bounding_box,
                  std::string text,
                  std::function<void()> on_button_down);
 
@@ -445,29 +372,31 @@ struct TopBarButton {
     void render(bool is_pressed);
 };
 
-class TopBar {
+class Navbar {
    public:
-    TopBar();
+    Navbar();
 
     void add_button(const std::string& text,
                     std::function<void()> on_button_down);
 
     void update();
 
-    void draw();
-
     Rect bounding_box;
+
+    friend class LogUI;
+    friend class TimelineUI;
+    friend class StatsUI;
 
    private:
     const unsigned int OUTER_PADDING = 4;
     const unsigned int INNER_PADDING = 2;
 
-    std::vector<TopBarButton> buttons;
+    std::vector<NavbarButton> buttons;
     unsigned int x;
     unsigned int current_selected;
 };
 
-TopBarButton::TopBarButton(Rect bounding_box,
+NavbarButton::NavbarButton(Rect bounding_box,
                            std::string text,
                            std::function<void()> on_button_down)
     : bounding_box(bounding_box), text(text), on_button_down(on_button_down) {
@@ -475,7 +404,7 @@ TopBarButton::TopBarButton(Rect bounding_box,
         bounding_box, on_button_down, []() {});
 }
 
-void TopBarButton::render(bool is_pressed) {
+void NavbarButton::render(bool is_pressed) {
     LCD.SetFontColor(is_pressed ? GRAY : BLACK);
     LCD.FillRectangle(bounding_box.x + 1,
                       bounding_box.y + 1,
@@ -490,12 +419,12 @@ void TopBarButton::render(bool is_pressed) {
     LCD.WriteAt(text.c_str(), bounding_box.x + 1, bounding_box.y + 3);
 }
 
-TopBar::TopBar() : x(0), current_selected(0) {
+Navbar::Navbar() : x(0), current_selected(0) {
     const auto y = OUTER_PADDING + INNER_PADDING + FONT_HEIGHT + INNER_PADDING;
     bounding_box = Rect(0, 0, LCD_WIDTH, y);
     LCD.DrawHorizontalLine(y, 0, LCD_WIDTH);
 }
-void TopBar::add_button(const std::string& text,
+void Navbar::add_button(const std::string& text,
                         std::function<void()> on_button_down) {
     const auto TEXT_WIDTH = text.length() * FONT_WIDTH;
     const Rect button_rect(OUTER_PADDING + x,
@@ -504,7 +433,7 @@ void TopBar::add_button(const std::string& text,
                            INNER_PADDING + FONT_HEIGHT + INNER_PADDING);
 
     auto index = buttons.size();
-    buttons.push_back(TopBarButton(
+    buttons.push_back(NavbarButton(
         button_rect,
         text,
         [this, index, on_button_down]() {  // future segfault, `this` could move
@@ -528,12 +457,218 @@ void TopBar::add_button(const std::string& text,
     x += button_rect.width + OUTER_PADDING;
 }
 
-void TopBar::update() {
+void Navbar::update() {
     for (auto& button : buttons)
         button.region->update();
 }
 
-void TopBar::draw() {}
+/// Sequence of steps to execute
+class Timeline {
+   public:
+    /// Constructor for the Timeline
+    /// @param ts The steps to execute in order
+    template <typename... Ts>
+    Timeline(Ts&&... ts);
+
+    /// Execute the timeline
+    /// @param t The current time
+    /// @return True if the timeline is finished executing
+    bool timestep(double t);
+
+    friend class TimelineUI;
+
+   private:
+    /// The steps to execute
+    const std::vector<std::shared_ptr<Step>> steps;
+
+    /// The index of the current step
+    size_t current_step_index = 0;
+};
+
+template <typename... Ts>
+Timeline::Timeline(Ts&&... ts)
+    : steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
+
+bool Timeline::timestep(double t) {
+    if (current_step_index >= steps.size())
+        return false;
+
+    auto& step = steps[current_step_index];
+    step->t_end = t;
+    if (step->execute(t)) {
+        current_step_index++;
+        LOG_INFO("maybe moving to next step");
+
+        if (current_step_index < steps.size()) {
+            auto& next_step = steps[current_step_index];
+            next_step->t_start = t;
+            LOG_INFO("moving to next step");
+        } else {
+            return false;
+            LOG_INFO("timeline done");
+        }
+    }
+
+    return true;
+}
+
+class TimelineUI : public UIWindow {
+   public:
+    /// Constructor for the TimelineUI class
+    /// @param timeline The timeline to display
+    TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar);
+
+    /// Initial bulk render of the window (full re-render)
+    void render() override;
+
+    /// Inject updates to the UI
+    void update(double t) override;
+
+   private:
+    /// The timeline to display
+    Timeline& timeline;
+
+    Navbar& navbar;
+
+    /// The UI regions which can be touched
+    std::vector<TouchableRegion> regions;
+};
+
+TimelineUI::TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar)
+    : UIWindow(bounds), timeline(timeline), navbar(navbar) {}
+
+void TimelineUI::render() {
+    LCD.SetFontColor(BLACK);
+    LCD.FillRectangle(bounds.x, bounds.y, bounds.width, bounds.height);
+
+    LCD.SetFontColor(WHITE);
+    LCD.SetBackgroundColor(BLACK);
+
+    Rect block = Rect(1, bounds.y, bounds.width - 1, FONT_HEIGHT * 2 + 2);
+    for (const auto& step : timeline.steps) {
+        LCD.DrawRectangle(block.x, block.y, block.width, block.height);
+        LCD.WriteAt(step->name.c_str(), block.x + 1, block.y + 2);
+        LCD.WriteAt("t=", block.x + 1, block.y + 2 + FONT_HEIGHT);
+        LCD.WriteAt(step->t_end - step->t_start,
+                    block.x + 1 + (FONT_WIDTH * 2),
+                    block.y + 2 + FONT_HEIGHT);
+
+        block.y += block.height;
+    }
+}
+
+void TimelineUI::update(double t) {
+    if (navbar.current_selected != 0)
+        return;
+
+    for (auto& region : regions)
+        region.update();
+
+    LCD.SetFontColor(WHITE);
+    LCD.SetBackgroundColor(BLACK);
+
+    Rect block = Rect(1, bounds.y, bounds.width - 1, FONT_HEIGHT * 2 + 2);
+    for (const auto& step : timeline.steps) {
+        // LCD.SetFontColor(BLACK);
+        // LCD.FillRectangle(block.x + 1 + (FONT_WIDTH * 2),
+        //                   block.y + 2 + FONT_HEIGHT, FONT_WIDTH * 7,
+        //                   FONT_HEIGHT - 1);
+        // LCD.SetFontColor(WHITE);
+
+        LCD.WriteAt(step->t_end - step->t_start,
+                    block.x + 1 + (FONT_WIDTH * 2),
+                    block.y + 2 + FONT_HEIGHT);
+
+        block.y += block.height;
+    }
+}
+
+class LogUI : public UIWindow {
+   public:
+    LogUI(Rect bounds, Navbar& navbar);
+
+    /// Initial bulk render of the window (full re-render)
+    void render() override;
+
+    /// Inject updates to the UI
+    void update(double t) override;
+
+   private:
+    /// The UI regions which can be touched
+    std::vector<TouchableRegion> regions;
+
+    Navbar& navbar;
+};
+
+LogUI::LogUI(Rect bounds, Navbar& navbar) : UIWindow(bounds), navbar(navbar) {}
+
+void LogUI::render() {
+    LCD.SetFontColor(BLACK);
+    LCD.FillRectangle(bounds.x, bounds.y, bounds.width, bounds.height);
+
+    update(0);
+}
+
+void LogUI::update(double t) {
+    if (navbar.current_selected != 1)
+        return;
+
+    LCD.SetBackgroundColor(BLACK);
+    LCD.SetFontColor(WHITE);
+
+    const size_t max_lines = bounds.height / FONT_HEIGHT;
+    size_t scroll_index = 0;
+    if (logger->messages.size() > max_lines)
+        scroll_index = logger->messages.size() - max_lines;
+    for (size_t log_index = scroll_index, ui_index = 0;
+         log_index < scroll_index + max_lines &&
+         log_index < logger->messages.size();
+         log_index++, ui_index++) {
+        LCD.WriteAt(logger->messages[log_index].substr(0, 27).c_str(),
+                    bounds.x,
+                    bounds.y + (ui_index * FONT_HEIGHT));
+    }
+}
+
+class StatsUI : public UIWindow {
+   public:
+    StatsUI(Rect bounds, Navbar& navbar);
+
+    /// Initial bulk render of the window (full re-render)
+    void render() override;
+
+    /// Inject updates to the UI
+    void update(double t) override;
+
+   private:
+    /// The UI regions which can be touched
+    std::vector<TouchableRegion> regions;
+
+    Navbar& navbar;
+};
+
+StatsUI::StatsUI(Rect bounds, Navbar& navbar)
+    : UIWindow(bounds), navbar(navbar) {}
+
+void StatsUI::render() {
+    LCD.SetFontColor(BLACK);
+    LCD.FillRectangle(bounds.x, bounds.y, bounds.width, bounds.height);
+
+    update(0);
+}
+
+void StatsUI::update(double t) {
+    if (navbar.current_selected != 2)
+        return;
+
+    LCD.SetBackgroundColor(BLACK);
+    LCD.SetFontColor(WHITE);
+
+    const std::string battery_text = "Battery (V): ";
+    LCD.WriteAt(battery_text.c_str(), bounds.x, bounds.y);
+    // LCD.WriteAt(Battery.Voltage(),
+    //             bounds.x + (battery_text.length() * FONT_WIDTH), bounds.y);
+}
 
 /// Main function which is the entrypoint for the entire program
 int main() {
@@ -551,17 +686,17 @@ int main() {
         EndStep(),
     };
 
-    TopBar top_bar;
+    Navbar navbar;
     Rect working_area = Rect(0,
-                             top_bar.bounding_box.height,
+                             navbar.bounding_box.height + 1,
                              LCD_WIDTH,
-                             LCD_HEIGHT - top_bar.bounding_box.height);
-    top_bar.add_button("Timeline", [&]() { timeline.draw(working_area); });
-    top_bar.add_button("Logs", []() {});
-    top_bar.add_button("Stats", []() {});
-
-    LCD.SetFontColor(PINK);
-    LCD.DrawRectangle(1, 0, LCD_WIDTH - 2, LCD_HEIGHT - 2);
+                             LCD_HEIGHT - navbar.bounding_box.height);
+    TimelineUI timeline_ui(working_area, timeline, navbar);
+    LogUI log_ui(working_area, navbar);
+    StatsUI stats_ui(working_area, navbar);
+    navbar.add_button("Timeline", [&]() { timeline_ui.render(); });
+    navbar.add_button("Logs", [&]() { log_ui.render(); });
+    navbar.add_button("Stats", [&]() { stats_ui.render(); });
 
     // Main loop
     auto t = 0.0;
@@ -575,7 +710,13 @@ int main() {
         // running = timeline.timestep(t);
         timeline.timestep(t);
 
-        top_bar.update();
-        timeline.update(working_area, t);
+        navbar.update();
+        timeline_ui.update(t);
+        log_ui.update(t);
+        stats_ui.update(t);
+
+        // drawable region of our proteus is less than defined LCD values?????
+        // LCD.SetFontColor(PINK);
+        // LCD.DrawRectangle(1, 0, LCD_WIDTH - 2, LCD_HEIGHT - 2);
     }
 }
