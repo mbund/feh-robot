@@ -508,12 +508,20 @@ bool Timeline::timestep(double dt) {
         if (current_step_index < steps.size()) {
             auto& next_step = steps[current_step_index];
             next_step->t_start = t;
-        } else {
-            return false;
         }
     }
 
-    return true;
+    // if the timeline is done, then reset it
+    if (current_step_index >= steps.size()) {
+        current_step_index = 0;
+        auto& first_step = steps[current_step_index];
+        first_step->t_start = t;
+        is_playing = false;
+
+        return true;
+    }
+
+    return false;
 }
 
 class PlayPauseButton {
@@ -609,6 +617,8 @@ class TimelineUI : public UIWindow {
    private:
     void paginate();
 
+    size_t prev_timeline_step_index = 0;
+
     /// The timeline to display
     Timeline& timeline;
 
@@ -685,14 +695,17 @@ TimelineUI::TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar)
             play_rect,
             [&, i](PlayPauseButton::State state) {
                 if (state == PlayPauseButton::Play) {
+                    prev_timeline_step_index = timeline.current_step_index;
                     timeline.is_playing = true;
                     timeline.current_step_index = scroll_index + i;
-                    timeline.steps[timeline.current_step_index]->t_start =
-                        timeline.t;
+                    auto& step = timeline.steps[timeline.current_step_index];
+                    step->t_start = timeline.t;
+                    step->t_end = timeline.t;
 
                     button_pause_play->current_state =
                         PlayPauseButton::State::Pause;
                     button_pause_play->render();
+                    update();
                 }
 
                 return PlayPauseButton::State::Play;
@@ -752,7 +765,11 @@ void TimelineUI::render() {
         LCD.DrawRectangle(block.x, block.y, block.width, block.height);
         LCD.WriteAt(step->name.substr(0, 20).c_str(), block.x + 1, block.y + 3);
         LCD.WriteAt("t=", block.x + 1, block.y + 2 + FONT_HEIGHT);
-        LCD.WriteAt(step->t_end - step->t_start,
+        std::stringstream time_stream;
+        time_stream.setf(std::ios::fixed);
+        time_stream.precision(3);
+        time_stream << (step->t_end - step->t_start) << "s     ";
+        LCD.WriteAt(time_stream.str().c_str(),
                     block.x + 1 + (FONT_WIDTH * 2),
                     block.y + 2 + FONT_HEIGHT);
 
@@ -768,13 +785,8 @@ void TimelineUI::update() {
     if (navbar.current_selected != 0)
         return;
 
-    if (timeline.current_step_index >= timeline.steps.size()) {
-        timeline.is_playing = false;
-        timeline.current_step_index = 0;
-        button_pause_play->current_state = PlayPauseButton::State::Play;
-        button_pause_play->render();
+    if (timeline.current_step_index >= timeline.steps.size())
         return;
-    }
 
     region_page_up->update();
     region_page_down->update();
@@ -782,35 +794,131 @@ void TimelineUI::update() {
     for (auto& button : button_play_steps)
         button->update();
 
-    LCD.SetFontColor(WHITE);
-    LCD.SetBackgroundColor(BLACK);
+    if (timeline.current_step_index != prev_timeline_step_index) {
+        if (!timeline.is_playing) {
+            button_pause_play->current_state = PlayPauseButton::State::Play;
+            button_pause_play->render();
+        }
 
-    if (timeline.current_step_index < scroll_index)
-        return;
+        if (prev_timeline_step_index < scroll_index) {
+            // clear top status indicator
+            auto step_block = Rect(1,
+                                   bounds.y - 1,
+                                   bounds.width - BUTTON_MEASURE - 1,
+                                   FONT_HEIGHT * 2 + 3);
+            LCD.SetFontColor(BLACK);
+            LCD.FillRectangle(
+                step_block.x + step_block.width - BUTTON_MEASURE - 15 - 5,
+                step_block.y + 1,
+                10,
+                2);
+        } else if (prev_timeline_step_index >= scroll_index + 6) {
+            // clear bottom status indicator
+            auto step_block = Rect(1,
+                                   bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * 5,
+                                   bounds.width - BUTTON_MEASURE - 1,
+                                   FONT_HEIGHT * 2 + 3);
+            LCD.SetFontColor(BLACK);
+            LCD.FillRectangle(
+                step_block.x + step_block.width - BUTTON_MEASURE - 15 - 5,
+                step_block.y + step_block.height - 3,
+                10,
+                2);
+        } else {
+            const auto j = prev_timeline_step_index - scroll_index;
+            auto status_block = Rect(
+                200,
+                bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * j + 2 + FONT_HEIGHT,
+                bounds.width - BUTTON_MEASURE - 1 - 199 - BUTTON_MEASURE - 3,
+                FONT_HEIGHT);
 
-    if (timeline.current_step_index > scroll_index + 6)
+            LCD.SetFontColor(BLACK);
+            LCD.FillRectangle(status_block.x,
+                              status_block.y,
+                              status_block.width,
+                              status_block.height);
+        }
+
+        // automatically scroll if needed
+        if (timeline.current_step_index > prev_timeline_step_index &&
+            timeline.current_step_index >= scroll_index + 6) {
+            if (scroll_index < timeline.steps.size() - 6)
+                scroll_index++;
+            paginate();
+        }
+
+        // update the last timestep of the previously updated index
+        if (prev_timeline_step_index >= scroll_index &&
+            prev_timeline_step_index < scroll_index + 6) {
+            const auto i = prev_timeline_step_index - scroll_index;
+            auto step_block = Rect(1,
+                                   bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * i,
+                                   bounds.width - BUTTON_MEASURE - 1,
+                                   FONT_HEIGHT * 2 + 3);
+            auto& step = timeline.steps[prev_timeline_step_index];
+
+            LCD.SetFontColor(WHITE);
+            std::stringstream time_stream;
+            time_stream.setf(std::ios::fixed);
+            time_stream.precision(3);
+            time_stream << (step->t_end - step->t_start) << "s     ";
+            LCD.WriteAt(time_stream.str().c_str(),
+                        step_block.x + 1 + (FONT_WIDTH * 2),
+                        step_block.y + 2 + FONT_HEIGHT);
+        }
+    }
+
+    prev_timeline_step_index = timeline.current_step_index;
+
+    LCD.SetFontColor(timeline.is_playing ? GREEN : RED);
+
+    // set top status indicator
+    if (timeline.current_step_index < scroll_index) {
+        auto step_block = Rect(1,
+                               bounds.y - 1,
+                               bounds.width - BUTTON_MEASURE - 1,
+                               FONT_HEIGHT * 2 + 3);
+        LCD.FillRectangle(
+            step_block.x + step_block.width - BUTTON_MEASURE - 15 - 5,
+            step_block.y + 1,
+            10,
+            2);
         return;
+    }
+
+    // set bottom status indicator
+    if (timeline.current_step_index >= scroll_index + 6) {
+        auto step_block = Rect(1,
+                               bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * 5,
+                               bounds.width - BUTTON_MEASURE - 1,
+                               FONT_HEIGHT * 2 + 3);
+        LCD.FillRectangle(
+            step_block.x + step_block.width - BUTTON_MEASURE - 15 - 5,
+            step_block.y + step_block.height - 3,
+            10,
+            2);
+        return;
+    }
 
     const auto i = timeline.current_step_index - scroll_index;
-    Rect block = Rect(1,
-                      bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * i,
-                      bounds.width - BUTTON_MEASURE - 1,
-                      FONT_HEIGHT * 2 + 3);
+    auto step_block = Rect(1,
+                           bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * i,
+                           bounds.width - BUTTON_MEASURE - 1,
+                           FONT_HEIGHT * 2 + 3);
     auto& step = timeline.steps[timeline.current_step_index];
 
-    // LCD.SetFontColor(BLACK);
-    // LCD.FillRectangle(block.x + 1 + (FONT_WIDTH * 2),
-    //                   block.y + 2 + FONT_HEIGHT, LCD_WIDTH / 2,
-    //                   FONT_HEIGHT);
-    // LCD.SetFontColor(WHITE);
+    LCD.SetFontColor(WHITE);
+    std::stringstream time_stream;
+    time_stream.setf(std::ios::fixed);
+    time_stream.precision(3);
+    time_stream << (step->t_end - step->t_start) << "s     ";
+    LCD.WriteAt(time_stream.str().c_str(),
+                step_block.x + 1 + (FONT_WIDTH * 2),
+                step_block.y + 2 + FONT_HEIGHT);
 
-    LCD.WriteAt(step->t_end - step->t_start,
-                block.x + 1 + (FONT_WIDTH * 2),
-                block.y + 2 + FONT_HEIGHT);
-
-    LCD.SetFontColor(GREEN);
-    LCD.FillCircle(block.x + block.width - BUTTON_MEASURE - 15,
-                   block.y + block.height - 12,
+    LCD.SetFontColor(timeline.is_playing ? GREEN : RED);
+    LCD.FillCircle(step_block.x + step_block.width - BUTTON_MEASURE - 15,
+                   step_block.y + step_block.height - 12,
                    5);
 }
 
@@ -832,14 +940,36 @@ void TimelineUI::paginate() {
                           block.y + 3,
                           block.width - BUTTON_MEASURE - 4 - name_font_length,
                           FONT_HEIGHT);
+
+        const auto status_offset = 198;
+        LCD.FillRectangle(block.x + 1 + status_offset,
+                          block.y + 2 + FONT_HEIGHT,
+                          block.width - BUTTON_MEASURE - 4 - status_offset,
+                          FONT_HEIGHT);
+
         LCD.SetFontColor(WHITE);
         LCD.WriteAt(name.c_str(), block.x + 1, block.y + 3);
-        LCD.WriteAt(step->t_end - step->t_start,
+        std::stringstream time_stream;
+        time_stream.setf(std::ios::fixed);
+        time_stream.precision(3);
+        time_stream << (step->t_end - step->t_start) << "s     ";
+        LCD.WriteAt(time_stream.str().c_str(),
                     block.x + 1 + (FONT_WIDTH * 2),
                     block.y + 2 + FONT_HEIGHT);
 
         block.y += block.height - 1;
     }
+
+    // clear top status indicator
+    LCD.SetFontColor(BLACK);
+    auto step_block = Rect(1,
+                           bounds.y - 1,
+                           bounds.width - BUTTON_MEASURE - 1,
+                           FONT_HEIGHT * 2 + 3);
+    LCD.FillRectangle(step_block.x + step_block.width - BUTTON_MEASURE - 15 - 5,
+                      step_block.y + 1,
+                      10,
+                      2);
 }
 
 class LogUI : public UIWindow {
