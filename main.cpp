@@ -11,7 +11,6 @@
 #include <algorithm>
 #include <cstdlib>
 #include <functional>
-#include <iostream>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -33,8 +32,8 @@ const auto LCD_WIDTH = TRUE_LCD_WIDTH - 1;
 const auto LCD_HEIGHT = TRUE_LCD_HEIGHT - 2;
 const auto FONT_WIDTH = 12;
 const auto FONT_HEIGHT = 17;
-float touchX, touchY;
-bool touchPressed;
+float touch_x, touch_y;
+bool touch_pressed;
 
 inline std::string method_name(const std::string& pretty_function) {
     size_t colons = pretty_function.find("::");
@@ -297,7 +296,7 @@ class UIWindow {
     virtual void render() = 0;
 
     /// Inject updates to the UI
-    virtual void update(double t) = 0;
+    virtual void update() = 0;
 
    protected:
     Rect bounds;
@@ -348,11 +347,11 @@ TouchableRegion::TouchableRegion(Rect rect,
       on_button_exit(on_button_exit) {}
 
 void TouchableRegion::update() {
-    bool in_bounds = touchX >= rect.x && touchX <= rect.x + rect.width &&
-                     touchY + TOUCH_OFFSET_Y >= rect.y &&
-                     touchY + TOUCH_OFFSET_Y <= rect.y + rect.height;
+    bool in_bounds = touch_x >= rect.x && touch_x <= rect.x + rect.width &&
+                     touch_y + TOUCH_OFFSET_Y >= rect.y &&
+                     touch_y + TOUCH_OFFSET_Y <= rect.y + rect.height;
 
-    if (in_bounds && touchPressed && state == ButtonState::OutOfBounds) {
+    if (in_bounds && touch_pressed && state == ButtonState::OutOfBounds) {
         state = ButtonState::InBounds;
         on_button_enter();
     } else if (!in_bounds && state != ButtonState::OutOfBounds) {
@@ -473,15 +472,18 @@ class Timeline {
     Timeline(Ts&&... ts);
 
     /// Execute the timeline
-    /// @param t The current time
     /// @return True if the timeline is finished executing
-    bool timestep(double t);
+    bool timestep(double dt);
 
     friend class TimelineUI;
 
    private:
     /// The steps to execute
     const std::vector<std::shared_ptr<Step>> steps;
+
+    bool is_playing = false;
+
+    double t = 0;
 
     /// The index of the current step
     size_t current_step_index = 0;
@@ -491,9 +493,12 @@ template <typename... Ts>
 Timeline::Timeline(Ts&&... ts)
     : steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
 
-bool Timeline::timestep(double t) {
+bool Timeline::timestep(double dt) {
     if (current_step_index >= steps.size())
         return false;
+
+    if (is_playing)
+        t += dt;
 
     auto& step = steps[current_step_index];
     step->t_end = t;
@@ -513,34 +518,78 @@ bool Timeline::timestep(double t) {
 
 class PlayPauseButton {
    public:
-    enum PlayPauseButtonState {
+    enum State {
         Play,
         Pause,
     };
 
     PlayPauseButton(Rect bounding_box,
-                    std::function<void(PlayPauseButtonState)> on_button_down,
-                    PlayPauseButtonState default_state);
+                    std::function<State(State)> on_button_down,
+                    State default_state);
 
     Rect bounding_box;
+
+    State current_state;
+
+    void render();
 
     void update();
 
    private:
-    PlayPauseButtonState current_state;
     std::unique_ptr<TouchableRegion> region;
 };
 
-PlayPauseButton::PlayPauseButton(
-    Rect bounding_box,
-    std::function<void(PlayPauseButtonState)> on_button_down,
-    PlayPauseButtonState default_state)
+void PlayPauseButton::render() {
+    size_t tri_measure = 10;
+
+    LCD.SetFontColor(BLACK);
+    LCD.FillRectangle(bounding_box.x,
+                      bounding_box.y,
+                      bounding_box.width,
+                      bounding_box.height);
+
+    LCD.SetFontColor(WHITE);
+
+    LCD.DrawRectangle(bounding_box.x,
+                      bounding_box.y,
+                      bounding_box.width,
+                      bounding_box.height);
+
+    if (current_state == Pause) {
+        const auto center_line = bounding_box.x + bounding_box.width / 2;
+        for (size_t i = 0; i < 3; i++) {
+            LCD.DrawVerticalLine(center_line - i - 4,
+                                 bounding_box.y + 8,
+                                 bounding_box.y + bounding_box.height - 8);
+            LCD.DrawVerticalLine(center_line + i + 4,
+                                 bounding_box.y + 8,
+                                 bounding_box.y + bounding_box.height - 8);
+        }
+    } else if (current_state == Play) {
+        for (size_t i = 0; i < tri_measure; i++) {
+            size_t y = bounding_box.y + bounding_box.height / 2;
+            LCD.DrawVerticalLine(
+                bounding_box.x + bounding_box.width / 2 + tri_measure / 2 - i,
+                y - i,
+                y + i);
+        }
+    }
+}
+
+void PlayPauseButton::update() { region->update(); }
+
+PlayPauseButton::PlayPauseButton(Rect bounding_box,
+                                 std::function<State(State)> on_button_down,
+                                 State default_state)
     : bounding_box(bounding_box), current_state(default_state) {
     region = std::make_unique<TouchableRegion>(
         bounding_box,
-        [&]() {
-            current_state = current_state == Play ? Pause : Play;
-            on_button_down(current_state);
+        [this, on_button_down]() {
+            auto new_state = on_button_down(current_state);
+            if (new_state != current_state) {
+                current_state = new_state;
+                render();
+            }
         },
         []() {});
 }
@@ -555,9 +604,11 @@ class TimelineUI : public UIWindow {
     void render() override;
 
     /// Inject updates to the UI
-    void update(double t) override;
+    void update() override;
 
    private:
+    void paginate();
+
     /// The timeline to display
     Timeline& timeline;
 
@@ -565,29 +616,91 @@ class TimelineUI : public UIWindow {
 
     std::unique_ptr<TouchableRegion> region_page_up;
     std::unique_ptr<TouchableRegion> region_page_down;
-    std::unique_ptr<TouchableRegion> region_pause_play;
-    std::unique_ptr<TouchableRegion> region_play_step_1;
-    std::unique_ptr<TouchableRegion> region_play_step_2;
-    std::unique_ptr<TouchableRegion> region_play_step_3;
-    std::unique_ptr<TouchableRegion> region_play_step_4;
-    std::unique_ptr<TouchableRegion> region_play_step_5;
-    std::unique_ptr<TouchableRegion> region_play_step_6;
+    std::unique_ptr<PlayPauseButton> button_pause_play;
+    std::vector<std::unique_ptr<PlayPauseButton>> button_play_steps;
 
-    size_t timeline_index;
+    size_t scroll_index = 0;
 
     const size_t BUTTON_MEASURE = 2 * FONT_HEIGHT;
 };
 
 TimelineUI::TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar)
-    : UIWindow(bounds), timeline(timeline), navbar(navbar), timeline_index(0) {
-    LOG_INFO("constructing timeline ui");
+    : UIWindow(bounds), timeline(timeline), navbar(navbar) {
     region_page_up = std::make_unique<TouchableRegion>(
         Rect(bounds.x + bounds.width - BUTTON_MEASURE,
              bounds.y - 1,
              BUTTON_MEASURE,
              BUTTON_MEASURE),
-        []() { LOG_INFO("page up"); },
+        [&]() {
+            if (scroll_index > 0)
+                scroll_index--;
+            paginate();
+        },
         []() {});
+
+    region_page_down = std::make_unique<TouchableRegion>(
+        Rect(bounds.x + bounds.width - BUTTON_MEASURE,
+             bounds.y + bounds.height - BUTTON_MEASURE - 1,
+             BUTTON_MEASURE,
+             BUTTON_MEASURE),
+        [&]() {
+            if (scroll_index < timeline.steps.size() - 6)
+                scroll_index++;
+            paginate();
+        },
+        []() {});
+
+    button_pause_play = std::make_unique<PlayPauseButton>(
+        Rect(bounds.x + bounds.width - BUTTON_MEASURE,
+             bounds.y + bounds.height / 2 - BUTTON_MEASURE / 2,
+             BUTTON_MEASURE,
+             BUTTON_MEASURE),
+        [&](PlayPauseButton::State state) {
+            if (state == PlayPauseButton::Play) {
+                timeline.is_playing = true;
+            } else if (state == PlayPauseButton::Pause) {
+                timeline.is_playing = false;
+            }
+
+            return state == PlayPauseButton::Play ? PlayPauseButton::Pause
+                                                  : PlayPauseButton::Play;
+        },
+        PlayPauseButton::State::Play);
+
+    Rect block = Rect(1,
+                      bounds.y - 1,
+                      bounds.width - BUTTON_MEASURE - 1,
+                      FONT_HEIGHT * 2 + 3);
+    for (size_t i = 0;
+         i < std::min(
+                 timeline.steps.size(),
+                 static_cast<std::vector<std::shared_ptr<Step>>::size_type>(6));
+         i++) {
+        const auto PLAY_BUTTON_MEASURE = block.height;
+        Rect play_rect(block.x + block.width - PLAY_BUTTON_MEASURE,
+                       block.y,
+                       PLAY_BUTTON_MEASURE,
+                       PLAY_BUTTON_MEASURE);
+        button_play_steps.push_back(std::make_unique<PlayPauseButton>(
+            play_rect,
+            [&, i](PlayPauseButton::State state) {
+                if (state == PlayPauseButton::Play) {
+                    timeline.is_playing = true;
+                    timeline.current_step_index = scroll_index + i;
+                    timeline.steps[timeline.current_step_index]->t_start =
+                        timeline.t;
+
+                    button_pause_play->current_state =
+                        PlayPauseButton::State::Pause;
+                    button_pause_play->render();
+                }
+
+                return PlayPauseButton::State::Play;
+            },
+            PlayPauseButton::State::Play));
+
+        block.y += block.height - 1;
+    }
 }
 
 void TimelineUI::render() {
@@ -602,8 +715,6 @@ void TimelineUI::render() {
 
     size_t tri_measure = 10;
 
-    // Rect page_up_rect(bounds.x + bounds.width - BUTTON_MEASURE, bounds.y - 1,
-    //                   BUTTON_MEASURE, BUTTON_MEASURE);
     Rect page_up_rect = region_page_up->rect;
     LCD.DrawRectangle(page_up_rect.x,
                       page_up_rect.y,
@@ -617,10 +728,7 @@ void TimelineUI::render() {
             x + i);
     }
 
-    Rect page_down_rect(bounds.x + bounds.width - BUTTON_MEASURE,
-                        bounds.y + bounds.height - BUTTON_MEASURE - 1,
-                        BUTTON_MEASURE,
-                        BUTTON_MEASURE);
+    Rect page_down_rect = region_page_down->rect;
     LCD.DrawRectangle(page_down_rect.x,
                       page_down_rect.y,
                       page_down_rect.width,
@@ -633,39 +741,13 @@ void TimelineUI::render() {
             x + i);
     }
 
-    Rect pause_rect(bounds.x + bounds.width - BUTTON_MEASURE,
-                    bounds.y + bounds.height / 2 - BUTTON_MEASURE / 2,
-                    BUTTON_MEASURE,
-                    BUTTON_MEASURE);
-    LCD.DrawRectangle(
-        pause_rect.x, pause_rect.y, pause_rect.width, pause_rect.height);
-
-    // draw pause symbol
-    const auto center_line = pause_rect.x + pause_rect.width / 2;
-    for (size_t i = 0; i < 3; i++) {
-        LCD.DrawVerticalLine(center_line - i - 4,
-                             pause_rect.y + 8,
-                             pause_rect.y + pause_rect.height - 8);
-        LCD.DrawVerticalLine(center_line + i + 4,
-                             pause_rect.y + 8,
-                             pause_rect.y + pause_rect.height - 8);
-    }
-
-    // draw play symbol
-    for (size_t i = 0; i < tri_measure; i++) {
-        size_t y = pause_rect.y + pause_rect.height / 2;
-        LCD.DrawVerticalLine(
-            pause_rect.x + pause_rect.width / 2 + tri_measure / 2 - i,
-            y - i,
-            y + i);
-    }
-
     Rect block = Rect(1,
                       bounds.y - 1,
                       bounds.width - BUTTON_MEASURE - 1,
                       FONT_HEIGHT * 2 + 3);
-    size_t max_lines = 6;
-    for (size_t i = 0; i < max_lines && i < timeline.steps.size(); i++) {
+    for (size_t i = scroll_index;
+         i < std::min(timeline.steps.size(), scroll_index + 6);
+         i++) {
         auto& step = timeline.steps[i];
         LCD.DrawRectangle(block.x, block.y, block.width, block.height);
         LCD.WriteAt(step->name.substr(0, 20).c_str(), block.x + 1, block.y + 3);
@@ -674,41 +756,84 @@ void TimelineUI::render() {
                     block.x + 1 + (FONT_WIDTH * 2),
                     block.y + 2 + FONT_HEIGHT);
 
-        {
-            const auto block_measure = block.height;
-            Rect play_rect(block.x + block.width - block_measure,
-                           block.y,
-                           block_measure,
-                           block_measure);
-            LCD.DrawRectangle(
-                play_rect.x, play_rect.y, play_rect.width, play_rect.height);
-            for (size_t i = 0; i < tri_measure; i++) {
-                size_t y = play_rect.y + play_rect.height / 2;
-                LCD.DrawVerticalLine(
-                    play_rect.x + play_rect.width / 2 + tri_measure / 2 - i,
-                    y - i,
-                    y + i);
-            }
-        }
-
         block.y += block.height - 1;
     }
+
+    button_pause_play->render();
+    for (auto& button : button_play_steps)
+        button->render();
 }
 
-void TimelineUI::update(double t) {
+void TimelineUI::update() {
     if (navbar.current_selected != 0)
         return;
 
+    if (timeline.current_step_index >= timeline.steps.size()) {
+        timeline.is_playing = false;
+        timeline.current_step_index = 0;
+        button_pause_play->current_state = PlayPauseButton::State::Play;
+        button_pause_play->render();
+        return;
+    }
+
     region_page_up->update();
-    // region_page_down->update();
+    region_page_down->update();
+    button_pause_play->update();
+    for (auto& button : button_play_steps)
+        button->update();
 
     LCD.SetFontColor(WHITE);
     LCD.SetBackgroundColor(BLACK);
 
-    Rect block = Rect(1, bounds.y - 1, 0, FONT_HEIGHT * 2 + 3);
-    size_t max_lines = 6;
-    for (size_t i = 0; i < max_lines && i < timeline.steps.size(); i++) {
+    if (timeline.current_step_index < scroll_index)
+        return;
+
+    if (timeline.current_step_index > scroll_index + 6)
+        return;
+
+    const auto i = timeline.current_step_index - scroll_index;
+    Rect block = Rect(1,
+                      bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * i,
+                      bounds.width - BUTTON_MEASURE - 1,
+                      FONT_HEIGHT * 2 + 3);
+    auto& step = timeline.steps[timeline.current_step_index];
+
+    // LCD.SetFontColor(BLACK);
+    // LCD.FillRectangle(block.x + 1 + (FONT_WIDTH * 2),
+    //                   block.y + 2 + FONT_HEIGHT, LCD_WIDTH / 2,
+    //                   FONT_HEIGHT);
+    // LCD.SetFontColor(WHITE);
+
+    LCD.WriteAt(step->t_end - step->t_start,
+                block.x + 1 + (FONT_WIDTH * 2),
+                block.y + 2 + FONT_HEIGHT);
+
+    LCD.SetFontColor(GREEN);
+    LCD.FillCircle(block.x + block.width - BUTTON_MEASURE - 15,
+                   block.y + block.height - 12,
+                   5);
+}
+
+void TimelineUI::paginate() {
+    LCD.SetBackgroundColor(BLACK);
+
+    Rect block = Rect(1,
+                      bounds.y - 1,
+                      bounds.width - BUTTON_MEASURE - 1,
+                      FONT_HEIGHT * 2 + 3);
+    for (size_t i = scroll_index;
+         i < std::min(timeline.steps.size(), scroll_index + 6);
+         i++) {
         auto& step = timeline.steps[i];
+        LCD.SetFontColor(BLACK);
+        const auto& name = step->name.substr(0, 20);
+        const auto name_font_length = name.length() * FONT_WIDTH;
+        LCD.FillRectangle(block.x + 1 + name_font_length,
+                          block.y + 3,
+                          block.width - BUTTON_MEASURE - 4 - name_font_length,
+                          FONT_HEIGHT);
+        LCD.SetFontColor(WHITE);
+        LCD.WriteAt(name.c_str(), block.x + 1, block.y + 3);
         LCD.WriteAt(step->t_end - step->t_start,
                     block.x + 1 + (FONT_WIDTH * 2),
                     block.y + 2 + FONT_HEIGHT);
@@ -725,7 +850,7 @@ class LogUI : public UIWindow {
     void render() override;
 
     /// Inject updates to the UI
-    void update(double t) override;
+    void update() override;
 
    private:
     /// The UI regions which can be touched
@@ -740,10 +865,10 @@ void LogUI::render() {
     LCD.SetFontColor(BLACK);
     LCD.FillRectangle(bounds.x, bounds.y, bounds.width + 1, bounds.height);
 
-    update(0);
+    update();
 }
 
-void LogUI::update(double t) {
+void LogUI::update() {
     if (navbar.current_selected != 1)
         return;
 
@@ -772,7 +897,7 @@ class StatsUI : public UIWindow {
     void render() override;
 
     /// Inject updates to the UI
-    void update(double t) override;
+    void update() override;
 
    private:
     /// The UI regions which can be touched
@@ -788,10 +913,10 @@ void StatsUI::render() {
     LCD.SetFontColor(BLACK);
     LCD.FillRectangle(bounds.x, bounds.y, bounds.width + 1, bounds.height);
 
-    update(0);
+    update();
 }
 
-void StatsUI::update(double t) {
+void StatsUI::update() {
     if (navbar.current_selected != 2)
         return;
 
@@ -839,24 +964,21 @@ int main() {
 
     // Main loop
     auto t = 0.0;
-    auto start_time = TimeNow();
+    auto current_time = TimeNow();
 
-    auto running = true;
-    while (running) {
-        t = TimeNow() - start_time;
-        touchPressed = LCD.Touch(&touchX, &touchY);
+    while (true) {
+        auto new_time = TimeNow();
+        auto dt = new_time - t;
+        current_time = new_time;
+        t += dt;
 
-        // running = timeline.timestep(t);
-        timeline.timestep(t);
+        touch_pressed = LCD.Touch(&touch_x, &touch_y);
+
+        timeline.timestep(dt);
 
         navbar.update();
-        timeline_ui.update(t);
-        log_ui.update(t);
-        stats_ui.update(t);
-
-        // drawable region of our proteus is less than defined LCD values?????
-        // LCD.SetFontColor(PINK);
-        // LCD.DrawRectangle(1, 0, TRUE_LCD_WIDTH - 2, TRUE_LCD_HEIGHT - 2);
-        // LCD.DrawRectangle(0, 0, LCD_WIDTH, LCD_HEIGHT);
+        timeline_ui.update();
+        log_ui.update();
+        stats_ui.update();
     }
 }
