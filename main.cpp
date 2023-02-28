@@ -2,146 +2,79 @@
 /// @author Mark Bundschuh
 /// @brief Contains the entrypoint for the program
 
+#include <FEHIO.h>
 #include <FEHLCD.h>
 #include <FEHUtility.h>
 #include <LCDColors.h>
-// #include <FEHMotor.h>
-// #include <FEHBattery.h>
 
-#include <algorithm>
-#include <cstdlib>
-#include <functional>
-#include <memory>
-#include <sstream>
-#include <string>
-#include <vector>
+#include <cmath>
 
-// forward declarations
-class Timeline;
-class TimelineUI;
-class UIWindow;
-class Navbar;
-struct Rect;
+#include "util.h"
 
-const auto TOUCH_OFFSET_Y = -4;  // our Proteus innacurately reports touch
-                                 // location, so we must account for it
+Motor m1(FEHMotor::Motor0, FEHIO::P1_1, 1.0);
+Motor m2(FEHMotor::Motor1, FEHIO::P1_2, 1.0);
+Motor m3(FEHMotor::Motor2, FEHIO::P1_3, 1.0);
 
-const auto TRUE_LCD_WIDTH = 320;
-const auto TRUE_LCD_HEIGHT = 240;
-const auto LCD_WIDTH = TRUE_LCD_WIDTH - 1;
-const auto LCD_HEIGHT = TRUE_LCD_HEIGHT - 2;
-const auto FONT_WIDTH = 12;
-const auto FONT_HEIGHT = 17;
-float touch_x, touch_y;
-bool touch_pressed;
-
-inline std::string method_name(const std::string& pretty_function) {
-    size_t colons = pretty_function.find("::");
-    size_t begin = pretty_function.substr(0, colons).rfind(" ") + 1;
-    size_t end = pretty_function.rfind("(") - begin;
-
-    return pretty_function.substr(begin, end);
-}
-
-#define __METHOD_NAME__ method_name(__PRETTY_FUNCTION__)
-
-#define LOG_INFO(x)                 \
-    do {                            \
-        std::stringstream ss;       \
-        ss << __LINE__ << "|" << x; \
-        logger->info(ss.str());     \
-    } while (0)
-
-#define LOG_INFO_LONG(x)                                                \
-    do {                                                                \
-        std::stringstream ss;                                           \
-        ss << "[i:" << __METHOD_NAME__ << ":" << __LINE__ << "] " << x; \
-        logger->info(ss.str());                                         \
-    } while (0)
-
-/// Helper function to clamp a value between a lower and upper bound
-/// @param n The value to clamp
-/// @param lower The lower bound
-/// @param upper The upper bound
-template <typename T>
-T clamp(const T& n, const T& lower, const T& upper) {
-    return std::max(lower, std::min(n, upper));
-}
-
-class Log {
-   public:
-    Log();
-    Log(const Log& obj) = delete;
-
-    void info(std::string message);
-
-    friend class LogUI;
-
-   private:
-    std::vector<std::string> messages;
-};
-
-Log::Log() {}
-
-void Log::info(std::string message) {
-    // std::cout << message << "\n";
-    messages.push_back(message);
-}
-
-auto logger = std::make_shared<Log>();
-
-/// Base class for all steps
-class Step {
-   public:
-    /// Constructor for the Step class
-    /// @param name The name of the step (for debugging)
-    Step(std::string name);
-
-    /// Executes the step
-    /// @param t The current time
-    /// @return Whether the step is done
-    virtual bool execute(double t);
-
-    /// The name of the step
-    std::string name;
-
-    /// The time at which the step started
-    double t_start;
-
-    /// The time at which the step ended
-    double t_end;
-};
-
-Step::Step(std::string name) : t_start(0), t_end(0), name(name) {}
-
-bool Step::execute(double t) { return true; }
+AnalogInputPin cds(FEHIO::P0_0);
 
 /// Translates the robot for a given duration at a given heading
 class TranslateStep : public Step {
    public:
     /// Translate (move) the robot for a given duration at a given heading
     /// @param name The name of the step
-    /// @param duration The duration of the translation
+    /// @param distance The distance of the translation in inches
     /// @param heading The heading (angle) to translate towards
-    TranslateStep(std::string name, double duration, double heading);
+    TranslateStep(std::string name,
+                  double distance,
+                  double heading,
+                  double power);
 
     /// Execute the translation step
     bool execute(double t) override;
 
    private:
     double heading;
-    double duration;
+    double distance;
+    double power;
+
+    double x;
+    double y;
+    double m1_ratio;
+    double m2_ratio;
+    double m3_ratio;
+
+    double m1_dist = 0;
+    double m2_dist = 0;
+    double m3_dist = 0;
 };
 
-TranslateStep::TranslateStep(std::string name, double duration, double heading)
-    : Step(name), duration(duration), heading(heading) {}
+TranslateStep::TranslateStep(std::string name,
+                             double distance,
+                             double heading,
+                             double power)
+    : Step(name), distance(distance), heading(heading), power(power) {
+    x = std::cos(heading);
+    y = std::sin(heading);
+    m1_ratio = (2.0 / 3.0) * x;
+    m2_ratio = -(1.0 / 3.0) * x - (1.0 / std::sqrt(3.0)) * y;
+    m3_ratio = -(1.0 / 3.0) * x + (1.0 / std::sqrt(3.0)) * y;
+}
 
 bool TranslateStep::execute(double t) {
-    if (t >= t_start + duration) {
+    if (m1_dist >= distance && m2_dist >= distance && m3_dist >= distance) {
         LOG_INFO("translate step done");
+        return true;
     }
 
-    return t >= t_start + duration;
+    m1_dist += m1.get_distance();
+    m2_dist += m2.get_distance();
+    m3_dist += m3.get_distance();
+
+    m1.drive(power * m1_ratio);
+    m2.drive(power * m2_ratio);
+    m3.drive(power * m3_ratio);
+
+    return false;
 }
 
 /// Ends the program
@@ -162,32 +95,71 @@ bool EndStep::execute(double t) {
     return true;
 }
 
+class CDSWaitStep : public Step {
+   public:
+    CDSWaitStep(std::string name);
+
+    bool execute(double t) override;
+};
+
+CDSWaitStep::CDSWaitStep(std::string name) : Step(name) {}
+
+bool CDSWaitStep::execute(double t) {
+    constexpr auto RED_VALUE = 0.3;
+    return cds.Value() > RED_VALUE;
+}
+
 /// Rotate the robot for a given duration by a given angle
 class RotateStep : public Step {
    public:
     /// Rotate the robot for a given duration by a given angle
     /// @param name The name of the step
-    /// @param duration The duration of the rotation
     /// @param theta The angle to rotate by
-    RotateStep(std::string name, double duration, double theta);
+    RotateStep(std::string name, double theta, double power);
 
     /// Execute the rotation step
     bool execute(double t) override;
 
    private:
     double theta;
-    double duration;
+    double power;
+
+    double distance_per_wheel;
+
+    double m1_dist = 0;
+    double m2_dist = 0;
+    double m3_dist = 0;
 };
 
-RotateStep::RotateStep(std::string name, double duration, double theta)
-    : Step(name), duration(duration), theta(theta) {}
+RotateStep::RotateStep(std::string name, double theta, double power)
+    : Step(name), theta(theta), power(power) {
+    const auto distance = 2 * PI * ROBOT_CENTER_TO_WHEEL_DISTANCE * theta;
+    distance_per_wheel = distance / 3.0;
+}
 
 bool RotateStep::execute(double t) {
-    // if (t >= t_start + duration) {
-    //     LOG_INFO("rotate step done");
-    // }
+    if (m1_dist >= distance_per_wheel && m2_dist >= distance_per_wheel &&
+        m3_dist >= distance_per_wheel) {
+        LOG_INFO("rotate step done");
+        return true;
+    }
 
-    return t >= t_start + duration;
+    if (m1_dist < distance_per_wheel) {
+        m1.drive(power);
+        m1_dist += m1.get_distance();
+    }
+
+    if (m2_dist < distance_per_wheel) {
+        m2.drive(power);
+        m2_dist += m2.get_distance();
+    }
+
+    if (m3_dist < distance_per_wheel) {
+        m3.drive(power);
+        m3_dist += m3.get_distance();
+    }
+
+    return false;
 }
 
 /// Sleeps for a given duration
@@ -216,850 +188,6 @@ bool SleepStep::execute(double t) {
     return t >= t_start + duration;
 }
 
-template <typename T, typename... Ts>
-std::shared_ptr<T> make_shared(Ts&&... ts) {
-    return std::shared_ptr<T>(new T{std::forward<Ts>(ts)...});
-}
-
-template <typename Base, typename... Ts>
-std::vector<std::shared_ptr<Base>> make_vector_of_shared(Ts&&... ts) {
-    std::shared_ptr<Base> init[] = {make_shared<Ts>(std::forward<Ts>(ts))...};
-    return std::vector<std::shared_ptr<Base>>{
-        std::make_move_iterator(std::begin(init)),
-        std::make_move_iterator(std::end(init))};
-}
-
-/// Execute a set of steps in parallel
-class UnionStep : public Step {
-   public:
-    /// Constructor for a union step
-    /// @param name The name of the step
-    /// @param ts The steps to execute in parallel
-    template <typename... Ts>
-    UnionStep(std::string name, Ts&&... ts);
-
-    /// Execute the union step
-    bool execute(double t) override;
-
-   private:
-    std::vector<std::shared_ptr<Step>> steps;
-};
-
-template <typename... Ts>
-UnionStep::UnionStep(std::string name, Ts&&... ts)
-    : Step(name), steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
-
-bool UnionStep::execute(double t) {
-    for (auto& step : steps)
-        step->t_start = t_start;
-
-    return std::all_of(steps.begin(), steps.end(), [t](const auto& step) {
-        return step->execute(t);
-    });
-}
-
-/// Represents a rectangle
-struct Rect {
-    /// Default constructor for a rectangle
-    Rect() : x(0), y(0), width(0), height(0) {}
-
-    /// Constructor for a rectangle
-    /// @param x The x coordinate of the top left corner
-    /// @param y The y coordinate of the top left corner
-    /// @param width The width of the rectangle
-    /// @param height The height of the rectangle
-    Rect(unsigned int x,
-         unsigned int y,
-         unsigned int width,
-         unsigned int height)
-        : x(x), y(y), width(width), height(height) {}
-
-    /// The x coordinate of the top left corner
-    unsigned int x;
-
-    /// The y coordinate of the top left corner
-    unsigned int y;
-
-    /// The width of the rectangle
-    unsigned int width;
-
-    /// The height of the rectangle
-    unsigned int height;
-};
-
-class UIWindow {
-   public:
-    /// Constructor for the UIWindow class
-    UIWindow(Rect bounds);
-
-    /// Initial bulk render of the window (full re-render)
-    virtual void render() = 0;
-
-    /// Inject updates to the UI
-    virtual void update() = 0;
-
-   protected:
-    Rect bounds;
-};
-
-UIWindow::UIWindow(Rect bounds) : bounds(bounds) {}
-
-class TouchableRegion {
-   public:
-    /// Constructor for a touchable region
-    /// @param rect The rectangle that represents the region
-    /// @param on_button_enter The function to call when the button is pressed
-    /// @param on_button_exit The function to call when the button is released
-    TouchableRegion(
-        Rect rect,
-        std::function<void()> on_button_enter = []() {},
-        std::function<void()> on_button_exit = []() {});
-
-    /// Checks the touch sensor and updates the state of the button
-    void update();
-
-    /// The rectangle that represents the region
-    Rect rect;
-
-   private:
-    /// Type to represent the state of the button
-    typedef enum {
-        InBounds,
-        OutOfBounds,
-    } ButtonState;
-
-    /// The current state of the button
-    ButtonState state;
-
-    /// The function to call when the button is pressed
-    std::function<void()> on_button_enter;
-
-    /// The function to call when the button is released
-    std::function<void()> on_button_exit;
-};
-
-TouchableRegion::TouchableRegion(Rect rect,
-                                 std::function<void()> on_button_enter,
-                                 std::function<void()> on_button_exit)
-    : rect(rect),
-      state(ButtonState::OutOfBounds),
-      on_button_enter(on_button_enter),
-      on_button_exit(on_button_exit) {}
-
-void TouchableRegion::update() {
-    bool in_bounds = touch_x >= rect.x && touch_x <= rect.x + rect.width &&
-                     touch_y + TOUCH_OFFSET_Y >= rect.y &&
-                     touch_y + TOUCH_OFFSET_Y <= rect.y + rect.height;
-
-    if (in_bounds && touch_pressed && state == ButtonState::OutOfBounds) {
-        state = ButtonState::InBounds;
-        on_button_enter();
-    } else if (!in_bounds && state != ButtonState::OutOfBounds) {
-        state = ButtonState::OutOfBounds;
-        on_button_exit();
-    }
-}
-
-struct NavbarButton {
-    NavbarButton(Rect bounding_box,
-                 std::string text,
-                 std::function<void()> on_button_down);
-
-    Rect bounding_box;
-    std::string text;
-    std::function<void()> on_button_down;
-    std::unique_ptr<TouchableRegion> region;
-
-    void render(bool is_pressed);
-};
-
-class Navbar {
-   public:
-    Navbar();
-
-    void add_button(const std::string& text,
-                    std::function<void()> on_button_down);
-
-    void update();
-
-    Rect bounding_box;
-
-    friend class LogUI;
-    friend class TimelineUI;
-    friend class StatsUI;
-
-   private:
-    const unsigned int OUTER_PADDING = 4;
-    const unsigned int INNER_PADDING = 2;
-
-    std::vector<NavbarButton> buttons;
-    unsigned int x;
-    unsigned int current_selected;
-};
-
-NavbarButton::NavbarButton(Rect bounding_box,
-                           std::string text,
-                           std::function<void()> on_button_down)
-    : bounding_box(bounding_box), text(text), on_button_down(on_button_down) {
-    region = std::make_unique<TouchableRegion>(
-        bounding_box, on_button_down, []() {});
-}
-
-void NavbarButton::render(bool is_pressed) {
-    LCD.SetFontColor(is_pressed ? GRAY : BLACK);
-    LCD.FillRectangle(bounding_box.x + 1,
-                      bounding_box.y + 1,
-                      bounding_box.width - 1,
-                      bounding_box.height - 1);
-    LCD.SetFontColor(WHITE);
-    LCD.SetBackgroundColor(is_pressed ? GRAY : BLACK);
-    LCD.DrawRectangle(bounding_box.x,
-                      bounding_box.y,
-                      bounding_box.width,
-                      bounding_box.height);
-    LCD.WriteAt(text.c_str(), bounding_box.x + 1, bounding_box.y + 3);
-}
-
-Navbar::Navbar() : x(0), current_selected(0) {
-    const auto y = INNER_PADDING + FONT_HEIGHT + INNER_PADDING;
-    bounding_box = Rect(0, 0, LCD_WIDTH, y);
-    LCD.DrawHorizontalLine(y, 0, LCD_WIDTH);
-}
-void Navbar::add_button(const std::string& text,
-                        std::function<void()> on_button_down) {
-    const auto TEXT_WIDTH = text.length() * FONT_WIDTH;
-    const Rect button_rect(OUTER_PADDING + x,
-                           0,
-                           INNER_PADDING + TEXT_WIDTH + INNER_PADDING,
-                           INNER_PADDING + FONT_HEIGHT + INNER_PADDING);
-
-    auto index = buttons.size();
-    buttons.push_back(NavbarButton(
-        button_rect,
-        text,
-        [this, index, on_button_down]() {  // future segfault, `this` could move
-            if (this->current_selected != index) {
-                buttons[this->current_selected].render(false);
-                buttons[index].render(true);
-                this->current_selected = index;
-
-                on_button_down();
-            }
-        }));
-
-    buttons.back().render(false);
-
-    // the first insertion should be selected and render its own ui
-    if (index == 0) {
-        buttons[this->current_selected].render(true);
-        on_button_down();
-    }
-
-    x += button_rect.width + OUTER_PADDING;
-}
-
-void Navbar::update() {
-    for (auto& button : buttons)
-        button.region->update();
-}
-
-/// Sequence of steps to execute
-class Timeline {
-   public:
-    /// Constructor for the Timeline
-    /// @param ts The steps to execute in order
-    template <typename... Ts>
-    Timeline(Ts&&... ts);
-
-    /// Execute the timeline
-    /// @return True if the timeline is finished executing
-    bool timestep(double dt);
-
-    friend class TimelineUI;
-
-   private:
-    /// The steps to execute
-    const std::vector<std::shared_ptr<Step>> steps;
-
-    bool is_playing = false;
-
-    double t = 0;
-
-    /// The index of the current step
-    size_t current_step_index = 0;
-};
-
-template <typename... Ts>
-Timeline::Timeline(Ts&&... ts)
-    : steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
-
-bool Timeline::timestep(double dt) {
-    if (current_step_index >= steps.size())
-        return false;
-
-    if (is_playing)
-        t += dt;
-
-    auto& step = steps[current_step_index];
-    step->t_end = t;
-    if (step->execute(t)) {
-        current_step_index++;
-
-        if (current_step_index < steps.size()) {
-            auto& next_step = steps[current_step_index];
-            next_step->t_start = t;
-        }
-    }
-
-    // if the timeline is done, then reset it
-    if (current_step_index >= steps.size()) {
-        current_step_index = 0;
-        auto& first_step = steps[current_step_index];
-        first_step->t_start = t;
-        is_playing = false;
-
-        return true;
-    }
-
-    return false;
-}
-
-class PlayPauseButton {
-   public:
-    enum State {
-        Play,
-        Pause,
-    };
-
-    PlayPauseButton(Rect bounding_box,
-                    std::function<State(State)> on_button_down,
-                    State default_state);
-
-    Rect bounding_box;
-
-    State current_state;
-
-    void render();
-
-    void update();
-
-   private:
-    std::unique_ptr<TouchableRegion> region;
-};
-
-void PlayPauseButton::render() {
-    size_t tri_measure = 10;
-
-    LCD.SetFontColor(BLACK);
-    LCD.FillRectangle(bounding_box.x,
-                      bounding_box.y,
-                      bounding_box.width,
-                      bounding_box.height);
-
-    LCD.SetFontColor(WHITE);
-
-    LCD.DrawRectangle(bounding_box.x,
-                      bounding_box.y,
-                      bounding_box.width,
-                      bounding_box.height);
-
-    if (current_state == Pause) {
-        const auto center_line = bounding_box.x + bounding_box.width / 2;
-        for (size_t i = 0; i < 3; i++) {
-            LCD.DrawVerticalLine(center_line - i - 4,
-                                 bounding_box.y + 8,
-                                 bounding_box.y + bounding_box.height - 8);
-            LCD.DrawVerticalLine(center_line + i + 4,
-                                 bounding_box.y + 8,
-                                 bounding_box.y + bounding_box.height - 8);
-        }
-    } else if (current_state == Play) {
-        for (size_t i = 0; i < tri_measure; i++) {
-            size_t y = bounding_box.y + bounding_box.height / 2;
-            LCD.DrawVerticalLine(
-                bounding_box.x + bounding_box.width / 2 + tri_measure / 2 - i,
-                y - i,
-                y + i);
-        }
-    }
-}
-
-void PlayPauseButton::update() { region->update(); }
-
-PlayPauseButton::PlayPauseButton(Rect bounding_box,
-                                 std::function<State(State)> on_button_down,
-                                 State default_state)
-    : bounding_box(bounding_box), current_state(default_state) {
-    region = std::make_unique<TouchableRegion>(
-        bounding_box,
-        [this, on_button_down]() {
-            auto new_state = on_button_down(current_state);
-            if (new_state != current_state) {
-                current_state = new_state;
-                render();
-            }
-        },
-        []() {});
-}
-
-class TimelineUI : public UIWindow {
-   public:
-    /// Constructor for the TimelineUI class
-    /// @param timeline The timeline to display
-    TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar);
-
-    /// Initial bulk render of the window (full re-render)
-    void render() override;
-
-    /// Inject updates to the UI
-    void update() override;
-
-   private:
-    void paginate();
-
-    size_t prev_timeline_step_index = 0;
-
-    /// The timeline to display
-    Timeline& timeline;
-
-    Navbar& navbar;
-
-    std::unique_ptr<TouchableRegion> region_page_up;
-    std::unique_ptr<TouchableRegion> region_page_down;
-    std::unique_ptr<PlayPauseButton> button_pause_play;
-    std::vector<std::unique_ptr<PlayPauseButton>> button_play_steps;
-
-    size_t scroll_index = 0;
-
-    const size_t BUTTON_MEASURE = 2 * FONT_HEIGHT;
-};
-
-TimelineUI::TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar)
-    : UIWindow(bounds), timeline(timeline), navbar(navbar) {
-    region_page_up = std::make_unique<TouchableRegion>(
-        Rect(bounds.x + bounds.width - BUTTON_MEASURE,
-             bounds.y - 1,
-             BUTTON_MEASURE,
-             BUTTON_MEASURE),
-        [&]() {
-            if (scroll_index > 0)
-                scroll_index--;
-            paginate();
-        },
-        []() {});
-
-    region_page_down = std::make_unique<TouchableRegion>(
-        Rect(bounds.x + bounds.width - BUTTON_MEASURE,
-             bounds.y + bounds.height - BUTTON_MEASURE - 1,
-             BUTTON_MEASURE,
-             BUTTON_MEASURE),
-        [&]() {
-            if (scroll_index < timeline.steps.size() - 6)
-                scroll_index++;
-            paginate();
-        },
-        []() {});
-
-    button_pause_play = std::make_unique<PlayPauseButton>(
-        Rect(bounds.x + bounds.width - BUTTON_MEASURE,
-             bounds.y + bounds.height / 2 - BUTTON_MEASURE / 2,
-             BUTTON_MEASURE,
-             BUTTON_MEASURE),
-        [&](PlayPauseButton::State state) {
-            if (state == PlayPauseButton::Play) {
-                timeline.is_playing = true;
-            } else if (state == PlayPauseButton::Pause) {
-                timeline.is_playing = false;
-            }
-
-            return state == PlayPauseButton::Play ? PlayPauseButton::Pause
-                                                  : PlayPauseButton::Play;
-        },
-        PlayPauseButton::State::Play);
-
-    Rect block = Rect(1,
-                      bounds.y - 1,
-                      bounds.width - BUTTON_MEASURE - 1,
-                      FONT_HEIGHT * 2 + 3);
-    for (size_t i = 0;
-         i < std::min(
-                 timeline.steps.size(),
-                 static_cast<std::vector<std::shared_ptr<Step>>::size_type>(6));
-         i++) {
-        const auto PLAY_BUTTON_MEASURE = block.height;
-        Rect play_rect(block.x + block.width - PLAY_BUTTON_MEASURE,
-                       block.y,
-                       PLAY_BUTTON_MEASURE,
-                       PLAY_BUTTON_MEASURE);
-        button_play_steps.push_back(std::make_unique<PlayPauseButton>(
-            play_rect,
-            [&, i](PlayPauseButton::State state) {
-                if (state == PlayPauseButton::Play) {
-                    prev_timeline_step_index = timeline.current_step_index;
-                    timeline.is_playing = true;
-                    timeline.current_step_index = scroll_index + i;
-                    auto& step = timeline.steps[timeline.current_step_index];
-                    step->t_start = timeline.t;
-                    step->t_end = timeline.t;
-
-                    button_pause_play->current_state =
-                        PlayPauseButton::State::Pause;
-                    button_pause_play->render();
-                    update();
-                }
-
-                return PlayPauseButton::State::Play;
-            },
-            PlayPauseButton::State::Play));
-
-        block.y += block.height - 1;
-    }
-}
-
-void TimelineUI::render() {
-    LCD.SetFontColor(BLACK);
-    LCD.FillRectangle(bounds.x, bounds.y, bounds.width + 1, bounds.height);
-
-    LCD.SetFontColor(WHITE);
-    LCD.SetBackgroundColor(BLACK);
-
-    LCD.DrawVerticalLine(
-        bounds.x + bounds.width, bounds.y, bounds.y + bounds.height);
-
-    size_t tri_measure = 10;
-
-    Rect page_up_rect = region_page_up->rect;
-    LCD.DrawRectangle(page_up_rect.x,
-                      page_up_rect.y,
-                      page_up_rect.width,
-                      page_up_rect.height);
-    for (size_t i = 0; i < tri_measure; i++) {
-        size_t x = page_up_rect.x + page_up_rect.width / 2;
-        LCD.DrawHorizontalLine(
-            page_up_rect.y + page_up_rect.height / 2 - tri_measure / 2 + i,
-            x - i,
-            x + i);
-    }
-
-    Rect page_down_rect = region_page_down->rect;
-    LCD.DrawRectangle(page_down_rect.x,
-                      page_down_rect.y,
-                      page_down_rect.width,
-                      page_down_rect.height);
-    for (size_t i = 0; i < tri_measure; i++) {
-        size_t x = page_down_rect.x + page_down_rect.width / 2;
-        LCD.DrawHorizontalLine(
-            page_down_rect.y + page_down_rect.height / 2 + tri_measure / 2 - i,
-            x - i,
-            x + i);
-    }
-
-    Rect block = Rect(1,
-                      bounds.y - 1,
-                      bounds.width - BUTTON_MEASURE - 1,
-                      FONT_HEIGHT * 2 + 3);
-    for (size_t i = scroll_index;
-         i < std::min(timeline.steps.size(), scroll_index + 6);
-         i++) {
-        auto& step = timeline.steps[i];
-        LCD.DrawRectangle(block.x, block.y, block.width, block.height);
-        LCD.WriteAt(step->name.substr(0, 20).c_str(), block.x + 1, block.y + 3);
-        LCD.WriteAt("t=", block.x + 1, block.y + 2 + FONT_HEIGHT);
-        std::stringstream time_stream;
-        time_stream.setf(std::ios::fixed);
-        time_stream.precision(3);
-        time_stream << (step->t_end - step->t_start) << "s     ";
-        LCD.WriteAt(time_stream.str().c_str(),
-                    block.x + 1 + (FONT_WIDTH * 2),
-                    block.y + 2 + FONT_HEIGHT);
-
-        block.y += block.height - 1;
-    }
-
-    button_pause_play->render();
-    for (auto& button : button_play_steps)
-        button->render();
-}
-
-void TimelineUI::update() {
-    if (navbar.current_selected != 0)
-        return;
-
-    if (timeline.current_step_index >= timeline.steps.size())
-        return;
-
-    region_page_up->update();
-    region_page_down->update();
-    button_pause_play->update();
-    for (auto& button : button_play_steps)
-        button->update();
-
-    if (timeline.current_step_index != prev_timeline_step_index) {
-        if (!timeline.is_playing) {
-            button_pause_play->current_state = PlayPauseButton::State::Play;
-            button_pause_play->render();
-        }
-
-        if (prev_timeline_step_index < scroll_index) {
-            // clear top status indicator
-            auto step_block = Rect(1,
-                                   bounds.y - 1,
-                                   bounds.width - BUTTON_MEASURE - 1,
-                                   FONT_HEIGHT * 2 + 3);
-            LCD.SetFontColor(BLACK);
-            LCD.FillRectangle(
-                step_block.x + step_block.width - BUTTON_MEASURE - 15 - 5,
-                step_block.y + 1,
-                10,
-                2);
-        } else if (prev_timeline_step_index >= scroll_index + 6) {
-            // clear bottom status indicator
-            auto step_block = Rect(1,
-                                   bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * 5,
-                                   bounds.width - BUTTON_MEASURE - 1,
-                                   FONT_HEIGHT * 2 + 3);
-            LCD.SetFontColor(BLACK);
-            LCD.FillRectangle(
-                step_block.x + step_block.width - BUTTON_MEASURE - 15 - 5,
-                step_block.y + step_block.height - 3,
-                10,
-                2);
-        } else {
-            const auto j = prev_timeline_step_index - scroll_index;
-            auto status_block = Rect(
-                200,
-                bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * j + 2 + FONT_HEIGHT,
-                bounds.width - BUTTON_MEASURE - 1 - 199 - BUTTON_MEASURE - 3,
-                FONT_HEIGHT);
-
-            LCD.SetFontColor(BLACK);
-            LCD.FillRectangle(status_block.x,
-                              status_block.y,
-                              status_block.width,
-                              status_block.height);
-        }
-
-        // automatically scroll if needed
-        if (timeline.current_step_index > prev_timeline_step_index &&
-            timeline.current_step_index >= scroll_index + 6) {
-            if (scroll_index < timeline.steps.size() - 6)
-                scroll_index++;
-            paginate();
-        }
-
-        // update the last timestep of the previously updated index
-        if (prev_timeline_step_index >= scroll_index &&
-            prev_timeline_step_index < scroll_index + 6) {
-            const auto i = prev_timeline_step_index - scroll_index;
-            auto step_block = Rect(1,
-                                   bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * i,
-                                   bounds.width - BUTTON_MEASURE - 1,
-                                   FONT_HEIGHT * 2 + 3);
-            auto& step = timeline.steps[prev_timeline_step_index];
-
-            LCD.SetFontColor(WHITE);
-            std::stringstream time_stream;
-            time_stream.setf(std::ios::fixed);
-            time_stream.precision(3);
-            time_stream << (step->t_end - step->t_start) << "s     ";
-            LCD.WriteAt(time_stream.str().c_str(),
-                        step_block.x + 1 + (FONT_WIDTH * 2),
-                        step_block.y + 2 + FONT_HEIGHT);
-        }
-    }
-
-    prev_timeline_step_index = timeline.current_step_index;
-
-    LCD.SetFontColor(timeline.is_playing ? GREEN : RED);
-
-    // set top status indicator
-    if (timeline.current_step_index < scroll_index) {
-        auto step_block = Rect(1,
-                               bounds.y - 1,
-                               bounds.width - BUTTON_MEASURE - 1,
-                               FONT_HEIGHT * 2 + 3);
-        LCD.FillRectangle(
-            step_block.x + step_block.width - BUTTON_MEASURE - 15 - 5,
-            step_block.y + 1,
-            10,
-            2);
-        return;
-    }
-
-    // set bottom status indicator
-    if (timeline.current_step_index >= scroll_index + 6) {
-        auto step_block = Rect(1,
-                               bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * 5,
-                               bounds.width - BUTTON_MEASURE - 1,
-                               FONT_HEIGHT * 2 + 3);
-        LCD.FillRectangle(
-            step_block.x + step_block.width - BUTTON_MEASURE - 15 - 5,
-            step_block.y + step_block.height - 3,
-            10,
-            2);
-        return;
-    }
-
-    const auto i = timeline.current_step_index - scroll_index;
-    auto step_block = Rect(1,
-                           bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * i,
-                           bounds.width - BUTTON_MEASURE - 1,
-                           FONT_HEIGHT * 2 + 3);
-    auto& step = timeline.steps[timeline.current_step_index];
-
-    LCD.SetFontColor(WHITE);
-    std::stringstream time_stream;
-    time_stream.setf(std::ios::fixed);
-    time_stream.precision(3);
-    time_stream << (step->t_end - step->t_start) << "s     ";
-    LCD.WriteAt(time_stream.str().c_str(),
-                step_block.x + 1 + (FONT_WIDTH * 2),
-                step_block.y + 2 + FONT_HEIGHT);
-
-    LCD.SetFontColor(timeline.is_playing ? GREEN : RED);
-    LCD.FillCircle(step_block.x + step_block.width - BUTTON_MEASURE - 15,
-                   step_block.y + step_block.height - 12,
-                   5);
-}
-
-void TimelineUI::paginate() {
-    LCD.SetBackgroundColor(BLACK);
-
-    Rect block = Rect(1,
-                      bounds.y - 1,
-                      bounds.width - BUTTON_MEASURE - 1,
-                      FONT_HEIGHT * 2 + 3);
-    for (size_t i = scroll_index;
-         i < std::min(timeline.steps.size(), scroll_index + 6);
-         i++) {
-        auto& step = timeline.steps[i];
-        LCD.SetFontColor(BLACK);
-        const auto& name = step->name.substr(0, 20);
-        const auto name_font_length = name.length() * FONT_WIDTH;
-        LCD.FillRectangle(block.x + 1 + name_font_length,
-                          block.y + 3,
-                          block.width - BUTTON_MEASURE - 4 - name_font_length,
-                          FONT_HEIGHT);
-
-        const auto status_offset = 198;
-        LCD.FillRectangle(block.x + 1 + status_offset,
-                          block.y + 2 + FONT_HEIGHT,
-                          block.width - BUTTON_MEASURE - 4 - status_offset,
-                          FONT_HEIGHT);
-
-        LCD.SetFontColor(WHITE);
-        LCD.WriteAt(name.c_str(), block.x + 1, block.y + 3);
-        std::stringstream time_stream;
-        time_stream.setf(std::ios::fixed);
-        time_stream.precision(3);
-        time_stream << (step->t_end - step->t_start) << "s     ";
-        LCD.WriteAt(time_stream.str().c_str(),
-                    block.x + 1 + (FONT_WIDTH * 2),
-                    block.y + 2 + FONT_HEIGHT);
-
-        block.y += block.height - 1;
-    }
-
-    // clear top status indicator
-    LCD.SetFontColor(BLACK);
-    auto step_block = Rect(1,
-                           bounds.y - 1,
-                           bounds.width - BUTTON_MEASURE - 1,
-                           FONT_HEIGHT * 2 + 3);
-    LCD.FillRectangle(step_block.x + step_block.width - BUTTON_MEASURE - 15 - 5,
-                      step_block.y + 1,
-                      10,
-                      2);
-}
-
-class LogUI : public UIWindow {
-   public:
-    LogUI(Rect bounds, Navbar& navbar);
-
-    /// Initial bulk render of the window (full re-render)
-    void render() override;
-
-    /// Inject updates to the UI
-    void update() override;
-
-   private:
-    /// The UI regions which can be touched
-    std::vector<TouchableRegion> regions;
-
-    Navbar& navbar;
-};
-
-LogUI::LogUI(Rect bounds, Navbar& navbar) : UIWindow(bounds), navbar(navbar) {}
-
-void LogUI::render() {
-    LCD.SetFontColor(BLACK);
-    LCD.FillRectangle(bounds.x, bounds.y, bounds.width + 1, bounds.height);
-
-    update();
-}
-
-void LogUI::update() {
-    if (navbar.current_selected != 1)
-        return;
-
-    LCD.SetBackgroundColor(BLACK);
-    LCD.SetFontColor(WHITE);
-
-    const size_t max_lines = bounds.height / FONT_HEIGHT;
-    size_t scroll_index = 0;
-    if (logger->messages.size() > max_lines)
-        scroll_index = logger->messages.size() - max_lines;
-    for (size_t log_index = scroll_index, ui_index = 0;
-         log_index < scroll_index + max_lines &&
-         log_index < logger->messages.size();
-         log_index++, ui_index++) {
-        LCD.WriteAt(logger->messages[log_index].substr(0, 25).c_str(),
-                    bounds.x,
-                    bounds.y + (ui_index * FONT_HEIGHT) + 2);
-    }
-}
-
-class StatsUI : public UIWindow {
-   public:
-    StatsUI(Rect bounds, Navbar& navbar);
-
-    /// Initial bulk render of the window (full re-render)
-    void render() override;
-
-    /// Inject updates to the UI
-    void update() override;
-
-   private:
-    /// The UI regions which can be touched
-    std::vector<TouchableRegion> regions;
-
-    Navbar& navbar;
-};
-
-StatsUI::StatsUI(Rect bounds, Navbar& navbar)
-    : UIWindow(bounds), navbar(navbar) {}
-
-void StatsUI::render() {
-    LCD.SetFontColor(BLACK);
-    LCD.FillRectangle(bounds.x, bounds.y, bounds.width + 1, bounds.height);
-
-    update();
-}
-
-void StatsUI::update() {
-    if (navbar.current_selected != 2)
-        return;
-
-    LCD.SetBackgroundColor(BLACK);
-    LCD.SetFontColor(WHITE);
-
-    const std::string battery_text = "Battery (V): ";
-    LCD.WriteAt(battery_text.c_str(), bounds.x, bounds.y + 2);
-    // LCD.WriteAt(Battery.Voltage(),
-    //             bounds.x + (battery_text.length() * FONT_WIDTH), bounds.y +
-    //             2);
-}
-
 /// Main function which is the entrypoint for the entire program
 int main() {
     LOG_INFO("starting");
@@ -1067,16 +195,11 @@ int main() {
     LCD.SetFontColor(WHITE);
 
     Timeline timeline{
-        TranslateStep("Initial move", 3, 90),
+        RotateStep("Rotate", PI / 2, 0.2),
+        CDSWaitStep("Wait for light"),
+        TranslateStep("Initial move", 12, 0, 0.2),
         SleepStep("Sleep", 1),
-        UnionStep("Union",
-                  RotateStep("Second rotate", 2, 90),
-                  TranslateStep("Second move", 3, 90)),
-        RotateStep("Last rotate", 1, 90),
-        RotateStep("12345678901234567890123", 1, 90),
-        RotateStep("A", 1, 90),
-        RotateStep("B", 1, 90),
-        RotateStep("C", 1, 90),
+        TranslateStep("Move back", 12, 180, 0.2),
         EndStep(),
     };
 
@@ -1104,11 +227,18 @@ int main() {
 
         touch_pressed = LCD.Touch(&touch_x, &touch_y);
 
+        // advance the timeline
         timeline.timestep(dt);
 
+        // update all UI elements
         navbar.update();
         timeline_ui.update();
         log_ui.update();
         stats_ui.update();
+
+        // flush all motors
+        m1.flush();
+        m2.flush();
+        m3.flush();
     }
 }
