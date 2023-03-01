@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-const auto ROBOT_CENTER_TO_WHEEL_DISTANCE = 4.2667;  // inches
+const auto ROBOT_CENTER_TO_WHEEL_DISTANCE = 4;  // inches
 
 constexpr auto PI = 3.141592653589;
 constexpr auto TAU = PI * 2;
