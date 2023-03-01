@@ -8,6 +8,7 @@
 #include <LCDColors.h>
 
 #include <algorithm>
+#include <sstream>
 
 #include "FEHIO.h"
 #include "util.h"
@@ -619,26 +620,149 @@ void LogUI::update() {
     }
 }
 
-StatsUI::StatsUI(Rect bounds, Navbar& navbar)
-    : UIWindow(bounds), navbar(navbar) {}
+MiscUI::MiscUI(Rect bounds, Navbar& navbar) : UIWindow(bounds), navbar(navbar) {
+    constexpr auto BUTTON_MEASURE = 30;
+    const auto m1_rect = Rect(bounds.x + bounds.width - BUTTON_MEASURE,
+                              bounds.y + BUTTON_MEASURE,
+                              BUTTON_MEASURE,
+                              BUTTON_MEASURE);
 
-void StatsUI::render() {
+    m1_region = std::make_unique<TouchableRegion>(m1_rect, [m1_rect, this]() {
+        LCD.SetFontColor(GREEN);
+        LCD.FillRectangle(m1_rect.x, m1_rect.y, m1_rect.width, m1_rect.height);
+        LCD.SetFontColor(WHITE);
+        LCD.DrawRectangle(m1_rect.x, m1_rect.y, m1_rect.width, m1_rect.height);
+        m1_dist = 0;
+        m1.flush();
+        m1_start_time = TimeNow();
+    });
+
+    const auto m2_rect = Rect(
+        m1_rect.x, m1_rect.y + BUTTON_MEASURE, m1_rect.width, m1_rect.height);
+    m2_region = std::make_unique<TouchableRegion>(m2_rect, [m2_rect, this]() {
+        LCD.SetFontColor(GREEN);
+        LCD.FillRectangle(m2_rect.x, m2_rect.y, m2_rect.width, m2_rect.height);
+        LCD.SetFontColor(WHITE);
+        LCD.DrawRectangle(m2_rect.x, m2_rect.y, m2_rect.width, m2_rect.height);
+        m2_dist = 0;
+        m2.flush();
+        m2_start_time = TimeNow();
+    });
+
+    const auto m3_rect = Rect(
+        m2_rect.x, m2_rect.y + BUTTON_MEASURE, m2_rect.width, m2_rect.height);
+    m3_region = std::make_unique<TouchableRegion>(m3_rect, [m3_rect, this]() {
+        LCD.SetFontColor(GREEN);
+        LCD.FillRectangle(m3_rect.x, m3_rect.y, m3_rect.width, m3_rect.height);
+        LCD.SetFontColor(WHITE);
+        LCD.DrawRectangle(m3_rect.x, m3_rect.y, m3_rect.width, m3_rect.height);
+        m3_dist = 0;
+        m3.flush();
+        m3_start_time = TimeNow();
+    });
+}
+
+void MiscUI::render() {
     LCD.SetFontColor(BLACK);
     LCD.FillRectangle(bounds.x, bounds.y, bounds.width + 1, bounds.height);
+
+    LCD.SetFontColor(m1_start_time == 0 ? RED : GREEN);
+    LCD.FillRectangle(m1_region->rect.x,
+                      m1_region->rect.y,
+                      m1_region->rect.width,
+                      m1_region->rect.height);
+    LCD.SetFontColor(WHITE);
+    LCD.DrawRectangle(m1_region->rect.x,
+                      m1_region->rect.y,
+                      m1_region->rect.width,
+                      m1_region->rect.height);
+
+    LCD.SetFontColor(m2_start_time == 0 ? RED : GREEN);
+    LCD.FillRectangle(m2_region->rect.x,
+                      m2_region->rect.y,
+                      m2_region->rect.width,
+                      m2_region->rect.height);
+    LCD.SetFontColor(WHITE);
+    LCD.DrawRectangle(m2_region->rect.x,
+                      m2_region->rect.y,
+                      m2_region->rect.width,
+                      m2_region->rect.height);
+
+    LCD.SetFontColor(m3_start_time == 0 ? RED : GREEN);
+    LCD.FillRectangle(m3_region->rect.x,
+                      m3_region->rect.y,
+                      m3_region->rect.width,
+                      m3_region->rect.height);
+    LCD.SetFontColor(WHITE);
+    LCD.DrawRectangle(m3_region->rect.x,
+                      m3_region->rect.y,
+                      m3_region->rect.width,
+                      m3_region->rect.height);
 
     update();
 }
 
-void StatsUI::update() {
+void MiscUI::update_motor_button(Motor& motor,
+                                 std::unique_ptr<TouchableRegion>& region,
+                                 double& start_time,
+                                 double& dist) {
+    dist += motor.get_distance();
+    region->update();
+    if (start_time != 0) {
+        if (TimeNow() - start_time < 5.0) {
+            motor.drive(0.2);
+        } else {
+            start_time = 0;
+            LCD.SetFontColor(RED);
+            LCD.FillRectangle(region->rect.x,
+                              region->rect.y,
+                              region->rect.width,
+                              region->rect.height);
+            LCD.SetFontColor(WHITE);
+            LCD.DrawRectangle(region->rect.x,
+                              region->rect.y,
+                              region->rect.width,
+                              region->rect.height);
+        }
+    }
+}
+
+void MiscUI::update() {
     if (navbar.current_selected != 2)
         return;
 
     LCD.SetBackgroundColor(BLACK);
     LCD.SetFontColor(WHITE);
 
-    const std::string battery_text = "Battery (V): ";
-    LCD.WriteAt(battery_text.c_str(), bounds.x, bounds.y + 2);
-    LCD.WriteAt(Battery.Voltage(),
-                bounds.x + (battery_text.length() * FONT_WIDTH),
-                bounds.y + 2);
+    std::stringstream battery_stream;
+    battery_stream << "Battery (0-11.7V): " << Battery.Voltage();
+    LCD.WriteAt(
+        battery_stream.str().c_str(), bounds.x, bounds.y + 2 + FONT_HEIGHT * 0);
+
+    std::stringstream cds_stream;
+    cds_stream << "Cds (0-3.3V): " << cds.Value();
+    LCD.WriteAt(
+        cds_stream.str().c_str(), bounds.x, bounds.y + 2 + FONT_HEIGHT * 1);
+
+    std::stringstream m1_distance_stream;
+    m1_distance_stream << "M1 dist (in): " << m1_dist;
+    LCD.WriteAt(m1_distance_stream.str().c_str(),
+                bounds.x,
+                bounds.y + 2 + FONT_HEIGHT * 2);
+
+    std::stringstream m2_distance_stream;
+    m2_distance_stream << "M2 dist (in): " << m2.get_distance();
+    LCD.WriteAt(m2_distance_stream.str().c_str(),
+                bounds.x,
+                bounds.y + 2 + FONT_HEIGHT * 3);
+
+    std::stringstream m3_distance_stream;
+    m3_distance_stream << "M3 dist (in): " << m3.get_distance();
+    LCD.WriteAt(m3_distance_stream.str().c_str(),
+                bounds.x,
+                bounds.y + 2 + FONT_HEIGHT * 4);
+
+    update_motor_button(m1, m1_region, m1_start_time, m1_dist);
+    update_motor_button(m2, m2_region, m2_start_time, m2_dist);
+    update_motor_button(m3, m3_region, m3_start_time, m3_dist);
 }

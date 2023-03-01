@@ -11,12 +11,6 @@
 
 #include "util.h"
 
-Motor m1(FEHMotor::Motor0, FEHIO::P1_1, 1.0);
-Motor m2(FEHMotor::Motor1, FEHIO::P1_2, 1.0);
-Motor m3(FEHMotor::Motor2, FEHIO::P1_3, 1.0);
-
-AnalogInputPin cds(FEHIO::P0_0);
-
 /// Translates the robot for a given duration at a given heading
 class TranslateStep : public Step {
    public:
@@ -106,7 +100,7 @@ CDSWaitStep::CDSWaitStep(std::string name) : Step(name) {}
 
 bool CDSWaitStep::execute(double t) {
     constexpr auto RED_VALUE = 0.3;
-    return cds.Value() > RED_VALUE;
+    return cds.Value() < RED_VALUE;
 }
 
 /// Rotate the robot for a given duration by a given angle
@@ -133,7 +127,7 @@ class RotateStep : public Step {
 
 RotateStep::RotateStep(std::string name, double theta, double power)
     : Step(name), theta(theta), power(power) {
-    const auto distance = 2 * PI * ROBOT_CENTER_TO_WHEEL_DISTANCE * theta;
+    const auto distance = TAU * ROBOT_CENTER_TO_WHEEL_DISTANCE * theta;
     distance_per_wheel = distance / 3.0;
 }
 
@@ -195,7 +189,7 @@ int main() {
     LCD.SetFontColor(WHITE);
 
     Timeline timeline{
-        RotateStep("Rotate", PI / 2, 0.2),
+        RotateStep("Rotate", 1 * TAU / 4, 0.2),
         CDSWaitStep("Wait for light"),
         TranslateStep("Initial move", 12, 0, 0.2),
         SleepStep("Sleep", 1),
@@ -210,10 +204,10 @@ int main() {
                              LCD_HEIGHT - navbar.bounding_box.height);
     TimelineUI timeline_ui(working_area, timeline, navbar);
     LogUI log_ui(working_area, navbar);
-    StatsUI stats_ui(working_area, navbar);
+    MiscUI misc_ui(working_area, navbar);
     navbar.add_button("Timeline", [&]() { timeline_ui.render(); });
     navbar.add_button("Logs", [&]() { log_ui.render(); });
-    navbar.add_button("Stats", [&]() { stats_ui.render(); });
+    navbar.add_button("Misc", [&]() { misc_ui.render(); });
 
     // Main loop
     auto t = 0.0;
@@ -234,7 +228,7 @@ int main() {
         navbar.update();
         timeline_ui.update();
         log_ui.update();
-        stats_ui.update();
+        misc_ui.update();
 
         // flush all motors
         m1.flush();

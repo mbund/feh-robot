@@ -4,6 +4,7 @@
 /// @author Mark Bundschuh
 /// @brief Utility functions and classes
 
+#include <FEHIO.h>
 #include <FEHMotor.h>
 
 #include <functional>
@@ -11,14 +12,14 @@
 #include <sstream>
 #include <string>
 #include <vector>
-#include "FEHIO.h"
 
-const auto ROBOT_CENTER_TO_WHEEL_DISTANCE = 4.5;  // inches
+const auto ROBOT_CENTER_TO_WHEEL_DISTANCE = 4.2667;  // inches
 
 constexpr auto PI = 3.141592653589;
+constexpr auto TAU = PI * 2;
 constexpr auto IGWAN_COUNTS_PER_REVOLUTION = 318;
-constexpr auto WHEEL_RADIUS = 1.25;
-constexpr auto WHEEL_CIRCUMFERENCE = 2 * PI * WHEEL_RADIUS;
+constexpr auto WHEEL_RADIUS = 1.205;
+constexpr auto WHEEL_CIRCUMFERENCE = TAU * WHEEL_RADIUS;
 constexpr auto IGWAN_COUNTS_PER_INCH =
     IGWAN_COUNTS_PER_REVOLUTION / WHEEL_CIRCUMFERENCE;
 
@@ -243,7 +244,7 @@ class Navbar {
 
     friend class LogUI;
     friend class TimelineUI;
-    friend class StatsUI;
+    friend class MiscUI;
 
    private:
     const unsigned int OUTER_PADDING = 4;
@@ -356,9 +357,9 @@ class LogUI : public UIWindow {
     Navbar& navbar;
 };
 
-class StatsUI : public UIWindow {
+class MiscUI : public UIWindow {
    public:
-    StatsUI(Rect bounds, Navbar& navbar);
+    MiscUI(Rect bounds, Navbar& navbar);
 
     /// Initial bulk render of the window (full re-render)
     void render() override;
@@ -367,8 +368,28 @@ class StatsUI : public UIWindow {
     void update() override;
 
    private:
-    /// The UI regions which can be touched
-    std::vector<TouchableRegion> regions;
+    std::unique_ptr<TouchableRegion> m1_region;
+    double m1_start_time = 0;
+    double m1_dist = 0;
+
+    std::unique_ptr<TouchableRegion> m2_region;
+    double m2_start_time = 0;
+    double m2_dist = 0;
+
+    std::unique_ptr<TouchableRegion> m3_region;
+    double m3_start_time = 0;
+    double m3_dist = 0;
+
+    void update_motor_button(Motor& motor,
+                             std::unique_ptr<TouchableRegion>& region,
+                             double& start_time,
+                             double& dist);
 
     Navbar& navbar;
 };
+
+inline Motor m1(FEHMotor::Motor0, FEHIO::P1_0, 1.0);
+inline Motor m2(FEHMotor::Motor1, FEHIO::P1_1, 1.0);
+inline Motor m3(FEHMotor::Motor2, FEHIO::P1_2, 1.0);
+
+inline AnalogInputPin cds(FEHIO::P0_0);
