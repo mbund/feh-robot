@@ -388,8 +388,8 @@ class MiscUI : public UIWindow {
     Navbar& navbar;
 };
 
-inline Motor m1(FEHMotor::Motor0, FEHIO::P1_0, 1.0);
-inline Motor m2(FEHMotor::Motor1, FEHIO::P1_1, 1.0);
-inline Motor m3(FEHMotor::Motor2, FEHIO::P1_2, 1.0);
+inline Motor m1(FEHMotor::Motor0, FEHIO::P3_5, 1.0);
+inline Motor m2(FEHMotor::Motor1, FEHIO::P3_3, 1.0);
+inline Motor m3(FEHMotor::Motor2, FEHIO::P3_1, 1.0);
 
-inline AnalogInputPin cds(FEHIO::P0_0);
+inline AnalogInputPin cds(FEHIO::P3_7);

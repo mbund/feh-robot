@@ -751,13 +751,13 @@ void MiscUI::update() {
                 bounds.y + 2 + FONT_HEIGHT * 2);
 
     std::stringstream m2_distance_stream;
-    m2_distance_stream << "M2 dist (in): " << m2.get_distance();
+    m2_distance_stream << "M2 dist (in): " << m2_dist;
     LCD.WriteAt(m2_distance_stream.str().c_str(),
                 bounds.x,
                 bounds.y + 2 + FONT_HEIGHT * 3);
 
     std::stringstream m3_distance_stream;
-    m3_distance_stream << "M3 dist (in): " << m3.get_distance();
+    m3_distance_stream << "M3 dist (in): " << m3_dist;
     LCD.WriteAt(m3_distance_stream.str().c_str(),
                 bounds.x,
                 bounds.y + 2 + FONT_HEIGHT * 4);

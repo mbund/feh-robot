@@ -55,7 +55,8 @@ TranslateStep::TranslateStep(std::string name,
 }
 
 bool TranslateStep::execute(double t) {
-    if (m1_dist >= distance && m2_dist >= distance && m3_dist >= distance) {
+    if (m1_dist >= distance &&
+        /* m2_dist >= distance && */ m3_dist >= distance) {
         LOG_INFO("translate step done");
         return true;
     }
@@ -118,7 +119,7 @@ class RotateStep : public Step {
     double theta;
     double power;
 
-    double distance_per_wheel;
+    double distance;
 
     double m1_dist = 0;
     double m2_dist = 0;
@@ -127,31 +128,31 @@ class RotateStep : public Step {
 
 RotateStep::RotateStep(std::string name, double theta, double power)
     : Step(name), theta(theta), power(power) {
-    const auto distance = TAU * ROBOT_CENTER_TO_WHEEL_DISTANCE * theta;
-    distance_per_wheel = distance / 3.0;
+    distance = ROBOT_CENTER_TO_WHEEL_DISTANCE * theta;
+    LOG_INFO("Rotating " << distance << " in");
 }
 
 bool RotateStep::execute(double t) {
-    if (m1_dist >= distance_per_wheel && m2_dist >= distance_per_wheel &&
-        m3_dist >= distance_per_wheel) {
+    if (m1_dist + m2_dist + m3_dist >= distance) {
         LOG_INFO("rotate step done");
         return true;
     }
 
-    if (m1_dist < distance_per_wheel) {
-        m1.drive(power);
-        m1_dist += m1.get_distance();
+    if ((int)std::round(t) % 2 == 0) {
+        LOG_INFO("dist " << distance);
+        LOG_INFO("m1 " << m1_dist);
+        LOG_INFO("m2 " << m2_dist);
+        LOG_INFO("m3 " << m3_dist);
     }
 
-    if (m2_dist < distance_per_wheel) {
-        m2.drive(power);
-        m2_dist += m2.get_distance();
-    }
+    m1.drive(power);
+    m1_dist += m1.get_distance();
 
-    if (m3_dist < distance_per_wheel) {
-        m3.drive(power);
-        m3_dist += m3.get_distance();
-    }
+    m2.drive(power);
+    m2_dist += m2.get_distance();
+
+    m3.drive(power);
+    m3_dist += m3.get_distance();
 
     return false;
 }
@@ -182,6 +183,8 @@ bool SleepStep::execute(double t) {
     return t >= t_start + duration;
 }
 
+double deg_to_rad(double deg) { return deg * TAU / 360.0; }
+
 /// Main function which is the entrypoint for the entire program
 int main() {
     LOG_INFO("starting");
@@ -189,11 +192,19 @@ int main() {
     LCD.SetFontColor(WHITE);
 
     Timeline timeline{
-        RotateStep("Rotate", 1 * TAU / 4, 0.2),
+        RotateStep("Rotate", deg_to_rad(90), 0.2),
         CDSWaitStep("Wait for light"),
-        TranslateStep("Initial move", 12, 0, 0.2),
+        TranslateStep("Initial move", 12, deg_to_rad(0), 0.5),
         SleepStep("Sleep", 1),
-        TranslateStep("Move back", 12, 180, 0.2),
+        TranslateStep("Move back", 4, deg_to_rad(180), 0.5),
+        TranslateStep("0", 4, deg_to_rad(0), 0.5),
+        TranslateStep("45", 4, deg_to_rad(45), 0.5),
+        TranslateStep("90", 4, deg_to_rad(90), 0.5),
+        TranslateStep("135", 4, deg_to_rad(135), 0.5),
+        TranslateStep("180", 4, deg_to_rad(180), 0.5),
+        TranslateStep("225", 4, deg_to_rad(225), 0.5),
+        TranslateStep("270", 4, deg_to_rad(270), 0.5),
+        TranslateStep("315", 4, deg_to_rad(315), 0.5),
         EndStep(),
     };
 
