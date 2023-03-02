@@ -13,28 +13,62 @@
 #include <string>
 #include <vector>
 
-const auto ROBOT_CENTER_TO_WHEEL_DISTANCE = 4;  // inches
+/// The distance between the center of the robot and the center of one of the
+/// wheels, in inches
+const auto ROBOT_CENTER_TO_WHEEL_DISTANCE = 4;
 
+/// The mathematical constant pi
 constexpr auto PI = 3.141592653589;
+
+/// The mathematical constant tau
 constexpr auto TAU = PI * 2;
+
+/// The number of encoder counts per revolution of an IGWAN motor
 constexpr auto IGWAN_COUNTS_PER_REVOLUTION = 318;
+
+/// The radius of one of the wheels, in inches
 constexpr auto WHEEL_RADIUS = 1.205;
+
+/// The circumference of one of the wheels, in inches
 constexpr auto WHEEL_CIRCUMFERENCE = TAU * WHEEL_RADIUS;
+
+/// The number of encoder counts per inch of travel
 constexpr auto IGWAN_COUNTS_PER_INCH =
     IGWAN_COUNTS_PER_REVOLUTION / WHEEL_CIRCUMFERENCE;
 
-const auto TOUCH_OFFSET_Y = -4;  // our Proteus innacurately reports touch
-                                 // location, so we must account for it
+/// Y offset in pixels for the reported touch location to the actual touch
+/// location. Our Proteus innacurately reports touch location, so we must
+/// account for it.
+const auto TOUCH_OFFSET_Y = -4;
 
+/// The supposed width of the LCD screen, in pixels
 const auto TRUE_LCD_WIDTH = 320;
+
+/// The supposed height of the LCD screen, in pixels
 const auto TRUE_LCD_HEIGHT = 240;
+
+/// The actual width of the LCD screen, in pixels
 const auto LCD_WIDTH = TRUE_LCD_WIDTH - 1;
+
+/// The actual height of the LCD screen, in pixels
 const auto LCD_HEIGHT = TRUE_LCD_HEIGHT - 2;
+
+/// The width of a standard character in the font, in pixels
 const auto FONT_WIDTH = 12;
+
+/// The height of a standard character in the font, in pixels
 const auto FONT_HEIGHT = 17;
-inline float touch_x, touch_y;
+
+/// Global position of the x coordinate of the touch location
+inline float touch_x;
+
+/// Global position of the y coordinate of the touch location
+inline float touch_y;
+
+/// Global variable for whether the screen is currently being touched
 inline bool touch_pressed;
 
+/// Log information to the screen and to a file with a built in string stream
 #define LOG_INFO(message)                                                \
     do {                                                                 \
         std::stringstream ss;                                            \
@@ -66,7 +100,7 @@ class Log {
               const char* pretty_function,
               int line);
 
-    /// Allows the LogUI class to access the private members of the Log class
+    /// Allow the LogUI class to access the private members of the Log class
     friend class LogUI;
 
    private:
@@ -305,9 +339,13 @@ class Navbar {
     /// The bounding box of the navbar
     Rect bounding_box;
 
-    /// Allow the UI classes to access the private members of the navbar
+    /// Allow the log UI to access private members of the navbar
     friend class LogUI;
+
+    /// Allow the timeline UI to access private members of the navbar
     friend class TimelineUI;
+
+    /// Allow the misc UI to access private members of the navbar
     friend class MiscUI;
 
    private:
@@ -339,6 +377,7 @@ class Timeline {
     /// @return True if the timeline is finished executing
     bool timestep(double dt);
 
+    /// Allow the timeline UI to access private members of the timeline
     friend class TimelineUI;
 
    private:
