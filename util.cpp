@@ -295,9 +295,9 @@ TimelineUI::TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar)
             if (state == PlayPauseButton::Play) {
                 timeline.is_playing = true;
             } else if (state == PlayPauseButton::Pause) {
-                m1.flush();
-                m2.flush();
-                m3.flush();
+                m1.drive(0);
+                m2.drive(0);
+                m3.drive(0);
                 timeline.is_playing = false;
             }
 
