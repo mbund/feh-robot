@@ -43,20 +43,37 @@ inline bool touch_pressed;
         logger->info(ss.str(), __FILE__, __PRETTY_FUNCTION__, __LINE__); \
     } while (0)
 
+/// Log information to the screen and to a file
 class Log {
    public:
+    /// Default constructor for the Log class
     Log();
+
+    /// Delete the copy constructor
+    /// @param obj The object to copy
     Log(const Log& obj) = delete;
 
+    /// Log an info message. Generally use the LOG_INFO macro instead of this.
+    /// @param message The message to log
+    /// @param file The file the message is being logged from, typically using
+    /// the __FILE__ macro
+    /// @param pretty_function The function the message is being logged from,
+    /// typically using the __PRETTY_FUNCTION__ macro
+    /// @param line The line the message is being logged from, typically using
+    /// the  __LINE__ macro
     void info(std::string message,
               const char* file,
               const char* pretty_function,
               int line);
 
+    /// Allows the LogUI class to access the private members of the Log class
     friend class LogUI;
 
    private:
+    /// The short messages to display on the screen
     std::vector<std::string> short_messages;
+
+    /// The long messages to write to the log file
     std::vector<std::string> long_messages;
 };
 
@@ -64,6 +81,9 @@ class Log {
 class Motor {
    public:
     /// Constructor for the Motor class
+    /// @param motor_port The port the motor is plugged into
+    /// @param encoder_pin The pin the encoder is plugged into
+    /// @param correction_factor The correction factor for the motor
     Motor(FEHMotor::FEHMotorPort motor_port,
           FEHIO::FEHIOPin encoder_pin,
           double correction_factor);
@@ -73,14 +93,23 @@ class Motor {
     void drive(double power);
 
     /// Gets the distance the motor has traveled in inches
+    /// @return The distance the motor has traveled in inches
     double get_distance();
 
+    /// Resets the encoder
     void flush();
 
    private:
+    /// The underlying motor
     FEHMotor motor;
+
+    /// The shaft encoder for the motor
     DigitalEncoder encoder;
+
+    /// The correction factor for the motor
     double correction_factor;
+
+    /// The last power set for the motor
     double power;
 };
 
@@ -96,6 +125,7 @@ class Step {
     /// @return Whether the step is done
     virtual bool execute(double t);
 
+    /// Function which is called when the step starts
     virtual void start();
 
     /// The name of the step
@@ -108,13 +138,17 @@ class Step {
     double t_end;
 };
 
+/// Global logger
 inline auto logger = std::make_shared<Log>();
 
+/// Helper template function for making a vector of shared pointer
 template <typename T, typename... Ts>
 std::shared_ptr<T> make_shared(Ts&&... ts) {
     return std::shared_ptr<T>(new T{std::forward<Ts>(ts)...});
 }
 
+/// Helper template function to make a vector of shared pointers, used by the
+/// Timeline and UnionStep classes.
 template <typename Base, typename... Ts>
 std::vector<std::shared_ptr<Base>> make_vector_of_shared(Ts&&... ts) {
     std::shared_ptr<Base> init[] = {make_shared<Ts>(std::forward<Ts>(ts))...};
@@ -136,6 +170,7 @@ class UnionStep : public Step {
     bool execute(double t) override;
 
    private:
+    /// The steps to execute in parallel
     std::vector<std::shared_ptr<Step>> steps;
 };
 
@@ -172,6 +207,7 @@ struct Rect {
     unsigned int height;
 };
 
+/// A window on the screen which can be accessed by the navbar
 class UIWindow {
    public:
     /// Constructor for the UIWindow class
@@ -184,9 +220,11 @@ class UIWindow {
     virtual void update() = 0;
 
    protected:
+    /// The bounds of the window
     Rect bounds;
 };
 
+/// Represents a touchable region on the screen
 class TouchableRegion {
    public:
     /// Constructor for a touchable region
@@ -221,40 +259,71 @@ class TouchableRegion {
     std::function<void()> on_button_exit;
 };
 
-struct NavbarButton {
+/// Represents a header button on the navbar
+class NavbarButton {
+   public:
+    /// Constructor for a navbar button
+    /// @param bounding_box The bounding box of the button
+    /// @param text The text to display on the button
+    /// @param on_button_down The function to call when the button is pressed
     NavbarButton(Rect bounding_box,
                  std::string text,
                  std::function<void()> on_button_down);
 
-    Rect bounding_box;
-    std::string text;
-    std::function<void()> on_button_down;
+    /// Render te button to the screen
+    void render(bool is_pressed);
+
+    /// The touchable region for the button
     std::unique_ptr<TouchableRegion> region;
 
-    void render(bool is_pressed);
+   private:
+    /// The bounding box of the button
+    Rect bounding_box;
+
+    /// The text to display on the button
+    std::string text;
+
+    /// The function to call when the button is pressed
+    std::function<void()> on_button_down;
 };
 
+/// Represents the navbar UI at the top of the screen
 class Navbar {
    public:
+    /// Default constructor for the navbar
     Navbar();
 
+    /// Add a button to the navbar
+    /// @param text The text to display on the button
+    /// @param on_button_down The function to call when the button is pressed
     void add_button(const std::string& text,
                     std::function<void()> on_button_down);
 
+    /// Update the navbar regions
     void update();
 
+    /// The bounding box of the navbar
     Rect bounding_box;
 
+    /// Allow the UI classes to access the private members of the navbar
     friend class LogUI;
     friend class TimelineUI;
     friend class MiscUI;
 
    private:
+    /// The padding between the navbar and the screen
     const unsigned int OUTER_PADDING = 4;
+
+    /// The padding between the buttons
     const unsigned int INNER_PADDING = 2;
 
+    /// The buttons to display on the navbar
     std::vector<NavbarButton> buttons;
+
+    /// The x distance of the next button
     unsigned int x;
+
+    /// The index of the currently selected button
     unsigned int current_selected;
 };
 
@@ -276,8 +345,10 @@ class Timeline {
     /// The steps to execute
     const std::vector<std::shared_ptr<Step>> steps;
 
+    /// If the timeline is currently playing
     bool is_playing = false;
 
+    /// The current time in the timeline
     double t = 0;
 
     /// The index of the current step
@@ -288,33 +359,47 @@ template <typename... Ts>
 Timeline::Timeline(Ts&&... ts)
     : steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
 
+/// Play/pause button UI component
 class PlayPauseButton {
    public:
+    /// Possible states of the button
     enum State {
         Play,
         Pause,
     };
 
+    /// Constructor for the PlayPauseButton
+    /// @param bounding_box The bounding box of the button
+    /// @param on_button_down The function to call when the button is pressed
+    /// @param default_state The default state of the button
     PlayPauseButton(Rect bounding_box,
                     std::function<State(State)> on_button_down,
                     State default_state);
 
-    Rect bounding_box;
-
-    State current_state;
-
-    void render();
-
+    /// Update the button state
     void update();
 
+    /// Render the button to the screen
+    void render();
+
+    /// The bounding box of the button
+    Rect bounding_box;
+
+    /// The current state of the button
+    State current_state;
+
    private:
+    /// The touchable region of the button
     std::unique_ptr<TouchableRegion> region;
 };
 
+/// UI helper class for displaying the timeline
 class TimelineUI : public UIWindow {
    public:
     /// Constructor for the TimelineUI class
+    /// @param bounds The bounds of the window
     /// @param timeline The timeline to display
+    /// @param navbar The navbar to display
     TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar);
 
     /// Initial bulk render of the window (full re-render)
@@ -324,27 +409,43 @@ class TimelineUI : public UIWindow {
     void update() override;
 
    private:
+    /// Rerender the timeline after a pagination
     void paginate();
 
+    /// The previous step index of the timeline
     size_t prev_timeline_step_index = 0;
 
     /// The timeline to display
     Timeline& timeline;
 
+    /// The active navbar
     Navbar& navbar;
 
+    /// The UI region of the page up button
     std::unique_ptr<TouchableRegion> region_page_up;
+
+    /// The UI region of the page down button
     std::unique_ptr<TouchableRegion> region_page_down;
+
+    /// The UI region of the play/pause button
     std::unique_ptr<PlayPauseButton> button_pause_play;
+
+    /// The play/pause buttons for each step
     std::vector<std::unique_ptr<PlayPauseButton>> button_play_steps;
 
+    /// The index of the first step to display because of pagination
     size_t scroll_index = 0;
 
+    /// The standard size of a button
     const size_t BUTTON_MEASURE = 2 * FONT_HEIGHT;
 };
 
+/// UI helper class for displaying the log
 class LogUI : public UIWindow {
    public:
+    /// Constructor for the LogUI class
+    /// @param bounds The bounds of the window
+    /// @param navbar The navbar to display
     LogUI(Rect bounds, Navbar& navbar);
 
     /// Initial bulk render of the window (full re-render)
@@ -357,11 +458,16 @@ class LogUI : public UIWindow {
     /// The UI regions which can be touched
     std::vector<TouchableRegion> regions;
 
+    /// The active navbar
     Navbar& navbar;
 };
 
+/// UI helper class for displaying miscellaneous UI components
 class MiscUI : public UIWindow {
    public:
+    /// Constructor for the MiscUI class
+    /// @param bounds The bounds of the window
+    /// @param navbar The navbar to display
     MiscUI(Rect bounds, Navbar& navbar);
 
     /// Initial bulk render of the window (full re-render)
@@ -371,25 +477,43 @@ class MiscUI : public UIWindow {
     void update() override;
 
    private:
+    /// The touchable region of the first motor's calibration button
     std::unique_ptr<TouchableRegion> m1_region;
+
+    /// The time the first motor's calibration button was pressed
     double m1_start_time = 0;
 
+    /// The touchable region of the second motor's calibration button
     std::unique_ptr<TouchableRegion> m2_region;
+
+    /// The time the second motor's calibration button was pressed
     double m2_start_time = 0;
 
+    /// The touchable region of the third motor's calibration button
     std::unique_ptr<TouchableRegion> m3_region;
+
+    /// The time the third motor's calibration button was pressed
     double m3_start_time = 0;
 
+    /// Helper function to update the button UI of a motor during calibration
     void update_motor_button_ui(std::unique_ptr<TouchableRegion>& region,
                                 double& start_time);
 
+    /// Helper function to calibrate a motor
     void calibrate(Motor& motor, double& start_time);
 
+    /// The active navbar
     Navbar& navbar;
 };
 
+/// Global first motor
 inline Motor m1(FEHMotor::Motor0, FEHIO::P3_5, 1);
+
+/// Global second motor
 inline Motor m2(FEHMotor::Motor1, FEHIO::P3_3, 0.987543237);
+
+/// Global third motor
 inline Motor m3(FEHMotor::Motor2, FEHIO::P3_1, 0.972031068);
 
+/// Global cds cell for light detection
 inline AnalogInputPin cds(FEHIO::P3_7);

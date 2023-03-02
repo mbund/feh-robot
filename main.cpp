@@ -84,10 +84,14 @@ bool EndStep::execute(double t) {
     return true;
 }
 
+/// Waits for the cds to be below a certain value
 class CDSWaitStep : public Step {
    public:
+    /// Constructor to make a step that waits for the cds to be below a certain
+    /// @param name The name of the step
     CDSWaitStep(std::string name);
 
+    /// Execute the cds wait step
     bool execute(double t) override;
 };
 
@@ -168,6 +172,9 @@ bool SleepStep::execute(double t) {
     return t >= t_start + duration;
 }
 
+/// Converts degrees to radians
+/// @param deg The degrees to convert
+/// @return The radian value of the degrees
 double deg_to_rad(double deg) { return deg * TAU / 360.0; }
 
 /// Main function which is the entrypoint for the entire program
