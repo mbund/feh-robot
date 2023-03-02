@@ -185,8 +185,17 @@ int main() {
 
     Timeline timeline{
         CDSWaitStep("Wait for light"),
-        RotateStep("rotate 360deg 40%", deg_to_rad(360), 0.40),
-        TranslateStep("up 24in 40%", 24, deg_to_rad(90), 0.40),
+        // RotateStep("rotate 360deg 40%", deg_to_rad(360), 0.40),
+
+        TranslateStep("t 3 45deg 75%", 3, deg_to_rad(45), 0.75),
+        TranslateStep("t 30 90deg 100%", 30, deg_to_rad(90), 1.00),
+        TranslateStep("t 10 180deg 100%", 10, deg_to_rad(180), 1.00),
+        TranslateStep("t 22 90deg 75%", 22, deg_to_rad(90), 0.75),
+
+        TranslateStep("t 22 90deg 75%", 22, deg_to_rad(90), -0.75),
+        TranslateStep("t 10 180deg 100%", 10, deg_to_rad(180), -1.00),
+        TranslateStep("t 20 90deg 100%", 20, deg_to_rad(90), -1.00),
+
         EndStep(),
     };
 

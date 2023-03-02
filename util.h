@@ -549,10 +549,10 @@ class MiscUI : public UIWindow {
 inline Motor m1(FEHMotor::Motor0, FEHIO::P3_5, 1);
 
 /// Global second motor
-inline Motor m2(FEHMotor::Motor1, FEHIO::P3_3, 0.987543237);
+inline Motor m2(FEHMotor::Motor1, FEHIO::P3_3, 1);
 
 /// Global third motor
-inline Motor m3(FEHMotor::Motor2, FEHIO::P3_1, 0.972031068);
+inline Motor m3(FEHMotor::Motor2, FEHIO::P3_1, 1);
 
 /// Global cds cell for light detection
 inline AnalogInputPin cds(FEHIO::P3_7);
