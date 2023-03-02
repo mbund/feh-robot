@@ -46,7 +46,8 @@ Motor::Motor(FEHMotor::FEHMotorPort port,
       encoder(encoder_pin) {}
 
 void Motor::drive(double power) {
-    this->power = clamp(this->power + power * correction_factor, -1.0, 1.0);
+    this->power = clamp(power * correction_factor, -1.0, 1.0);
+    motor.SetPercent(this->power * 100.0);
 }
 
 double Motor::get_distance() {
@@ -54,7 +55,7 @@ double Motor::get_distance() {
 }
 
 void Motor::flush() {
-    motor.SetPercent(power * 100.0);
+    motor.SetPercent(0);
     encoder.ResetCounts();
 
     power = 0;
@@ -63,6 +64,8 @@ void Motor::flush() {
 Step::Step(std::string name) : t_start(0), t_end(0), name(name) {}
 
 bool Step::execute(double t) { return true; }
+
+void Step::start() {}
 
 bool UnionStep::execute(double t) {
     for (auto& step : steps)
@@ -179,8 +182,12 @@ bool Timeline::timestep(double dt) {
         current_step_index++;
 
         if (current_step_index < steps.size()) {
+            m1.flush();
+            m2.flush();
+            m3.flush();
             auto& next_step = steps[current_step_index];
             next_step->t_start = t;
+            next_step->start();
         }
     }
 
@@ -189,6 +196,7 @@ bool Timeline::timestep(double dt) {
         current_step_index = 0;
         auto& first_step = steps[current_step_index];
         first_step->t_start = t;
+        first_step->t_end = t;
         is_playing = false;
 
         return true;
@@ -287,6 +295,9 @@ TimelineUI::TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar)
             if (state == PlayPauseButton::Play) {
                 timeline.is_playing = true;
             } else if (state == PlayPauseButton::Pause) {
+                m1.flush();
+                m2.flush();
+                m3.flush();
                 timeline.is_playing = false;
             }
 
@@ -319,6 +330,10 @@ TimelineUI::TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar)
                     auto& step = timeline.steps[timeline.current_step_index];
                     step->t_start = timeline.t;
                     step->t_end = timeline.t;
+                    m1.flush();
+                    m2.flush();
+                    m3.flush();
+                    step->start();
 
                     button_pause_play->current_state =
                         PlayPauseButton::State::Pause;
@@ -632,7 +647,6 @@ MiscUI::MiscUI(Rect bounds, Navbar& navbar) : UIWindow(bounds), navbar(navbar) {
         LCD.FillRectangle(m1_rect.x, m1_rect.y, m1_rect.width, m1_rect.height);
         LCD.SetFontColor(WHITE);
         LCD.DrawRectangle(m1_rect.x, m1_rect.y, m1_rect.width, m1_rect.height);
-        m1_dist = 0;
         m1.flush();
         m1_start_time = TimeNow();
     });
@@ -644,7 +658,6 @@ MiscUI::MiscUI(Rect bounds, Navbar& navbar) : UIWindow(bounds), navbar(navbar) {
         LCD.FillRectangle(m2_rect.x, m2_rect.y, m2_rect.width, m2_rect.height);
         LCD.SetFontColor(WHITE);
         LCD.DrawRectangle(m2_rect.x, m2_rect.y, m2_rect.width, m2_rect.height);
-        m2_dist = 0;
         m2.flush();
         m2_start_time = TimeNow();
     });
@@ -656,7 +669,6 @@ MiscUI::MiscUI(Rect bounds, Navbar& navbar) : UIWindow(bounds), navbar(navbar) {
         LCD.FillRectangle(m3_rect.x, m3_rect.y, m3_rect.width, m3_rect.height);
         LCD.SetFontColor(WHITE);
         LCD.DrawRectangle(m3_rect.x, m3_rect.y, m3_rect.width, m3_rect.height);
-        m3_dist = 0;
         m3.flush();
         m3_start_time = TimeNow();
     });
@@ -702,32 +714,40 @@ void MiscUI::render() {
     update();
 }
 
-void MiscUI::update_motor_button(Motor& motor,
-                                 std::unique_ptr<TouchableRegion>& region,
-                                 double& start_time,
-                                 double& dist) {
-    dist += motor.get_distance();
+void MiscUI::update_motor_button_ui(std::unique_ptr<TouchableRegion>& region,
+                                    double& start_time) {
     region->update();
+    if (start_time != 0 && TimeNow() - start_time >= 5.0) {
+        LCD.SetFontColor(RED);
+        LCD.FillRectangle(region->rect.x,
+                          region->rect.y,
+                          region->rect.width,
+                          region->rect.height);
+        LCD.SetFontColor(WHITE);
+        LCD.DrawRectangle(region->rect.x,
+                          region->rect.y,
+                          region->rect.width,
+                          region->rect.height);
+    }
+}
+
+void MiscUI::calibrate(Motor& motor, double& start_time) {
     if (start_time != 0) {
         if (TimeNow() - start_time < 5.0) {
             motor.drive(0.2);
         } else {
             start_time = 0;
-            LCD.SetFontColor(RED);
-            LCD.FillRectangle(region->rect.x,
-                              region->rect.y,
-                              region->rect.width,
-                              region->rect.height);
-            LCD.SetFontColor(WHITE);
-            LCD.DrawRectangle(region->rect.x,
-                              region->rect.y,
-                              region->rect.width,
-                              region->rect.height);
+            LOG_INFO("calib dist " << motor.get_distance());
+            motor.flush();
         }
     }
 }
 
 void MiscUI::update() {
+    calibrate(m1, m1_start_time);
+    calibrate(m2, m2_start_time);
+    calibrate(m3, m3_start_time);
+
     if (navbar.current_selected != 2)
         return;
 
@@ -745,24 +765,24 @@ void MiscUI::update() {
         cds_stream.str().c_str(), bounds.x, bounds.y + 2 + FONT_HEIGHT * 1);
 
     std::stringstream m1_distance_stream;
-    m1_distance_stream << "M1 dist (in): " << m1_dist;
+    m1_distance_stream << "M1 dist (in): " << m1.get_distance();
     LCD.WriteAt(m1_distance_stream.str().c_str(),
                 bounds.x,
                 bounds.y + 2 + FONT_HEIGHT * 2);
 
     std::stringstream m2_distance_stream;
-    m2_distance_stream << "M2 dist (in): " << m2_dist;
+    m2_distance_stream << "M2 dist (in): " << m2.get_distance();
     LCD.WriteAt(m2_distance_stream.str().c_str(),
                 bounds.x,
                 bounds.y + 2 + FONT_HEIGHT * 3);
 
     std::stringstream m3_distance_stream;
-    m3_distance_stream << "M3 dist (in): " << m3_dist;
+    m3_distance_stream << "M3 dist (in): " << m3.get_distance();
     LCD.WriteAt(m3_distance_stream.str().c_str(),
                 bounds.x,
                 bounds.y + 2 + FONT_HEIGHT * 4);
 
-    update_motor_button(m1, m1_region, m1_start_time, m1_dist);
-    update_motor_button(m2, m2_region, m2_start_time, m2_dist);
-    update_motor_button(m3, m3_region, m3_start_time, m3_dist);
+    update_motor_button_ui(m1_region, m1_start_time);
+    update_motor_button_ui(m2_region, m2_start_time);
+    update_motor_button_ui(m3_region, m3_start_time);
 }

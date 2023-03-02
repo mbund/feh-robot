@@ -17,7 +17,7 @@ class TranslateStep : public Step {
     /// Translate (move) the robot for a given duration at a given heading
     /// @param name The name of the step
     /// @param distance The distance of the translation in inches
-    /// @param heading The heading (angle) to translate towards
+    /// @param heading The heading (angle) to translate towards in radians
     TranslateStep(std::string name,
                   double distance,
                   double heading,
@@ -36,10 +36,6 @@ class TranslateStep : public Step {
     double m1_ratio;
     double m2_ratio;
     double m3_ratio;
-
-    double m1_dist = 0;
-    double m2_dist = 0;
-    double m3_dist = 0;
 };
 
 TranslateStep::TranslateStep(std::string name,
@@ -55,15 +51,13 @@ TranslateStep::TranslateStep(std::string name,
 }
 
 bool TranslateStep::execute(double t) {
-    if (m1_dist >= distance &&
-        /* m2_dist >= distance && */ m3_dist >= distance) {
-        LOG_INFO("translate step done");
+    if (std::abs(m1.get_distance() * m1_ratio) +
+            std::abs(m2.get_distance() * m2_ratio) +
+            std::abs(m3.get_distance() * m3_ratio) >=
+        distance) {
+        LOG_INFO("moved " << distance << "in " << heading << "rad");
         return true;
     }
-
-    m1_dist += m1.get_distance();
-    m2_dist += m2.get_distance();
-    m3_dist += m3.get_distance();
 
     m1.drive(power * m1_ratio);
     m2.drive(power * m2_ratio);
@@ -101,7 +95,14 @@ CDSWaitStep::CDSWaitStep(std::string name) : Step(name) {}
 
 bool CDSWaitStep::execute(double t) {
     constexpr auto RED_VALUE = 0.3;
-    return cds.Value() < RED_VALUE;
+
+    const auto val = cds.Value();
+    if (val < RED_VALUE) {
+        LOG_INFO("cds end " << val << " < " << RED_VALUE);
+        return true;
+    }
+
+    return false;
 }
 
 /// Rotate the robot for a given duration by a given angle
@@ -120,39 +121,23 @@ class RotateStep : public Step {
     double power;
 
     double distance;
-
-    double m1_dist = 0;
-    double m2_dist = 0;
-    double m3_dist = 0;
 };
 
 RotateStep::RotateStep(std::string name, double theta, double power)
     : Step(name), theta(theta), power(power) {
     distance = ROBOT_CENTER_TO_WHEEL_DISTANCE * theta;
-    LOG_INFO("Rotating " << distance << " in");
 }
 
 bool RotateStep::execute(double t) {
-    if (m1_dist + m2_dist + m3_dist >= distance) {
-        LOG_INFO("rotate step done");
+    if (m1.get_distance() + m2.get_distance() + m3.get_distance() >=
+        distance * 3 * (std::sqrt(3.0) / 2.0)) {
+        LOG_INFO("rotated " << theta << "rad");
         return true;
     }
 
-    if ((int)std::round(t) % 2 == 0) {
-        LOG_INFO("dist " << distance);
-        LOG_INFO("m1 " << m1_dist);
-        LOG_INFO("m2 " << m2_dist);
-        LOG_INFO("m3 " << m3_dist);
-    }
-
     m1.drive(power);
-    m1_dist += m1.get_distance();
-
     m2.drive(power);
-    m2_dist += m2.get_distance();
-
     m3.drive(power);
-    m3_dist += m3.get_distance();
 
     return false;
 }
@@ -177,7 +162,7 @@ SleepStep::SleepStep(std::string name, double duration)
 
 bool SleepStep::execute(double t) {
     if (t >= t_start + duration) {
-        LOG_INFO("sleep step done");
+        LOG_INFO("slept " << duration << "s");
     }
 
     return t >= t_start + duration;
@@ -192,19 +177,9 @@ int main() {
     LCD.SetFontColor(WHITE);
 
     Timeline timeline{
-        RotateStep("Rotate", deg_to_rad(90), 0.2),
         CDSWaitStep("Wait for light"),
-        TranslateStep("Initial move", 12, deg_to_rad(0), 0.5),
-        SleepStep("Sleep", 1),
-        TranslateStep("Move back", 4, deg_to_rad(180), 0.5),
-        TranslateStep("0", 4, deg_to_rad(0), 0.5),
-        TranslateStep("45", 4, deg_to_rad(45), 0.5),
-        TranslateStep("90", 4, deg_to_rad(90), 0.5),
-        TranslateStep("135", 4, deg_to_rad(135), 0.5),
-        TranslateStep("180", 4, deg_to_rad(180), 0.5),
-        TranslateStep("225", 4, deg_to_rad(225), 0.5),
-        TranslateStep("270", 4, deg_to_rad(270), 0.5),
-        TranslateStep("315", 4, deg_to_rad(315), 0.5),
+        RotateStep("rotate 360deg 40%", deg_to_rad(360), 0.40),
+        TranslateStep("up 24in 40%", 24, deg_to_rad(90), 0.40),
         EndStep(),
     };
 
@@ -240,10 +215,5 @@ int main() {
         timeline_ui.update();
         log_ui.update();
         misc_ui.update();
-
-        // flush all motors
-        m1.flush();
-        m2.flush();
-        m3.flush();
     }
 }

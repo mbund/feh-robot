@@ -38,6 +38,7 @@ inline bool touch_pressed;
 #define LOG_INFO(message)                                                \
     do {                                                                 \
         std::stringstream ss;                                            \
+        ss.precision(4);                                                 \
         ss << message;                                                   \
         logger->info(ss.str(), __FILE__, __PRETTY_FUNCTION__, __LINE__); \
     } while (0)
@@ -94,6 +95,8 @@ class Step {
     /// @param t The current time
     /// @return Whether the step is done
     virtual bool execute(double t);
+
+    virtual void start();
 
     /// The name of the step
     std::string name;
@@ -370,26 +373,23 @@ class MiscUI : public UIWindow {
    private:
     std::unique_ptr<TouchableRegion> m1_region;
     double m1_start_time = 0;
-    double m1_dist = 0;
 
     std::unique_ptr<TouchableRegion> m2_region;
     double m2_start_time = 0;
-    double m2_dist = 0;
 
     std::unique_ptr<TouchableRegion> m3_region;
     double m3_start_time = 0;
-    double m3_dist = 0;
 
-    void update_motor_button(Motor& motor,
-                             std::unique_ptr<TouchableRegion>& region,
-                             double& start_time,
-                             double& dist);
+    void update_motor_button_ui(std::unique_ptr<TouchableRegion>& region,
+                                double& start_time);
+
+    void calibrate(Motor& motor, double& start_time);
 
     Navbar& navbar;
 };
 
-inline Motor m1(FEHMotor::Motor0, FEHIO::P3_5, 1.0);
-inline Motor m2(FEHMotor::Motor1, FEHIO::P3_3, 1.0);
-inline Motor m3(FEHMotor::Motor2, FEHIO::P3_1, 1.0);
+inline Motor m1(FEHMotor::Motor0, FEHIO::P3_5, 1);
+inline Motor m2(FEHMotor::Motor1, FEHIO::P3_3, 0.987543237);
+inline Motor m3(FEHMotor::Motor2, FEHIO::P3_1, 0.972031068);
 
 inline AnalogInputPin cds(FEHIO::P3_7);
