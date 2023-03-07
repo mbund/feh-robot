@@ -38,12 +38,10 @@ void Log::info(std::string message,
     long_messages.push_back(long_message.str());
 }
 
-Motor::Motor(FEHMotor::FEHMotorPort port,
-             FEHIO::FEHIOPin encoder_pin,
-             double correction_factor)
-    : motor(port, 9.0),
-      correction_factor(correction_factor),
-      encoder(encoder_pin) {}
+Motor::Motor(FEHMotor::FEHMotorPort port, FEHIO::FEHIOPin encoder_pin)
+    : motor(port, 9.0), encoder(encoder_pin) {
+    flush();
+}
 
 void Motor::drive(double power) {
     this->power = clamp(power * correction_factor, -1.0, 1.0);
@@ -672,6 +670,10 @@ MiscUI::MiscUI(Rect bounds, Navbar& navbar) : UIWindow(bounds), navbar(navbar) {
         m3.flush();
         m3_start_time = TimeNow();
     });
+
+    const auto calibrator_rect = Rect(100, 100, BUTTON_MEASURE, BUTTON_MEASURE);
+    calibrator_region = std::make_unique<TouchableRegion>(
+        calibrator_rect, [this]() { is_calibrated = false; });
 }
 
 void MiscUI::render() {
@@ -711,6 +713,12 @@ void MiscUI::render() {
                       m3_region->rect.width,
                       m3_region->rect.height);
 
+    LCD.SetFontColor(WHITE);
+    LCD.DrawRectangle(calibrator_region->rect.x,
+                      calibrator_region->rect.y,
+                      calibrator_region->rect.width,
+                      calibrator_region->rect.height);
+
     update();
 }
 
@@ -731,7 +739,7 @@ void MiscUI::update_motor_button_ui(std::unique_ptr<TouchableRegion>& region,
     }
 }
 
-void MiscUI::calibrate(Motor& motor, double& start_time) {
+void MiscUI::count_single_motor(Motor& motor, double& start_time) {
     if (start_time != 0) {
         if (TimeNow() - start_time < 5.0) {
             motor.drive(0.2);
@@ -743,10 +751,58 @@ void MiscUI::calibrate(Motor& motor, double& start_time) {
     }
 }
 
+bool Calibrator::calibrate_motors() {
+    if (calibration_start_time == 0) {
+        calibration_start_time = TimeNow();
+    }
+
+    if (TimeNow() - calibration_start_time < 2.0) {
+        m1.drive(0.2);
+        m2.drive(0.2);
+        m3.drive(0.2);
+        return false;
+    }
+
+    calibration_start_time = 0;
+    LOG_INFO("c " << m1.get_distance() << " " << m2.get_distance() << " "
+                  << m3.get_distance());
+    const double d1 = m1.get_distance();
+    const double d2 = m2.get_distance();
+    const double d3 = m3.get_distance();
+    m1.flush();
+    m2.flush();
+    m3.flush();
+
+    constexpr auto DIST_THRESHOLD = 0.25;
+    if (std::abs(d1 - d2) < DIST_THRESHOLD &&
+        std::abs(d1 - d3) < DIST_THRESHOLD &&
+        std::abs(d2 - d3) < DIST_THRESHOLD) {
+        LOG_INFO("calibrated");
+        return true;
+    }
+
+    const auto max_distance = std::max(d1, std::max(d2, d3));
+    constexpr auto CORRECTION_FACTOR_ADJUSTMENT = 0.005;
+
+    if (d1 == max_distance)
+        m1.correction_factor -= CORRECTION_FACTOR_ADJUSTMENT;
+    if (d2 == max_distance)
+        m2.correction_factor -= CORRECTION_FACTOR_ADJUSTMENT;
+    if (d3 == max_distance)
+        m3.correction_factor -= CORRECTION_FACTOR_ADJUSTMENT;
+
+    return false;
+}
+
 void MiscUI::update() {
-    calibrate(m1, m1_start_time);
-    calibrate(m2, m2_start_time);
-    calibrate(m3, m3_start_time);
+    calibrator_region->update();
+    if (!is_calibrated) {
+        is_calibrated = calibrator.calibrate_motors();
+    }
+
+    count_single_motor(m1, m1_start_time);
+    count_single_motor(m2, m2_start_time);
+    count_single_motor(m3, m3_start_time);
 
     if (navbar.current_selected != 2)
         return;

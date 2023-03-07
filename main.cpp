@@ -8,8 +8,14 @@
 #include <LCDColors.h>
 
 #include <cmath>
+#include <vector>
 
 #include "util.h"
+
+/// Converts degrees to radians
+/// @param deg The degrees to convert
+/// @return The radian value of the degrees
+double deg_to_rad(double deg) { return deg * TAU / 360.0; }
 
 /// Translates the robot for a given duration at a given heading
 class TranslateStep : public Step {
@@ -172,10 +178,57 @@ bool SleepStep::execute(double t) {
     return t >= t_start + duration;
 }
 
-/// Converts degrees to radians
-/// @param deg The degrees to convert
-/// @return The radian value of the degrees
-double deg_to_rad(double deg) { return deg * TAU / 360.0; }
+class TicketKioskStep : public Step {
+   public:
+    TicketKioskStep(std::string name);
+
+    bool execute(double t) override;
+
+   private:
+    TranslateStep left_move_1;
+    TranslateStep left_move_2;
+    TranslateStep right_move_1;
+    TranslateStep right_move_2;
+    enum State { NONE, LEFT, RIGHT };
+
+    State state = NONE;
+};
+
+TicketKioskStep::TicketKioskStep(std::string name)
+    : Step(name),
+      left_move_1("t  6  90deg 60%", 6, deg_to_rad(90), 0.60),
+      left_move_2("t  6  90deg 60%", 6, deg_to_rad(90), 0.60),
+      right_move_1("t  6 -90deg 60%", 6, deg_to_rad(-90), 0.60),
+      right_move_2("t  6 -90deg 60%", 6, deg_to_rad(-90), 0.60) {}
+
+bool TicketKioskStep::execute(double t) {
+    if (state == NONE) {
+        constexpr auto RED_VALUE = 0.3;
+
+        const auto val = cds.Value();
+        if (val < RED_VALUE) {
+            state = LEFT;
+        }
+    }
+
+    if (state == LEFT) {
+        if (left_move_1.execute(t)) {
+            if (left_move_2.execute(t)) {
+                return true;
+            }
+        }
+    }
+
+    if (state == RIGHT) {
+        if (right_move_1.execute(t)) {
+            if (right_move_2.execute(t)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
 
 /// Main function which is the entrypoint for the entire program
 int main() {
@@ -185,16 +238,12 @@ int main() {
 
     Timeline timeline{
         CDSWaitStep("Wait for light"),
-        // RotateStep("rotate 360deg 40%", deg_to_rad(360), 0.40),
 
-        TranslateStep("t 3 45deg 75%", 3, deg_to_rad(45), 0.75),
-        TranslateStep("t 30 90deg 100%", 30, deg_to_rad(90), 1.00),
-        TranslateStep("t 10 180deg 100%", 10, deg_to_rad(180), 1.00),
-        TranslateStep("t 22 90deg 75%", 22, deg_to_rad(90), 0.75),
-
-        TranslateStep("t 22 90deg 75%", 22, deg_to_rad(90), -0.75),
-        TranslateStep("t 10 180deg 100%", 10, deg_to_rad(180), -1.00),
-        TranslateStep("t 20 90deg 100%", 20, deg_to_rad(90), -1.00),
+        TranslateStep("t  6  90deg 60%", 6, deg_to_rad(90), 0.60),
+        TranslateStep("t 36 180deg 60%", 36, deg_to_rad(180), 0.60),
+        TranslateStep("t 36  90deg 90%", 12, deg_to_rad(90), 0.90),
+        TranslateStep("t  6   0deg 60%", 12, deg_to_rad(0), 0.60),
+        TranslateStep("t 12  90deg 60%", 12, deg_to_rad(90), 0.60),
 
         EndStep(),
     };

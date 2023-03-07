@@ -117,10 +117,7 @@ class Motor {
     /// Constructor for the Motor class
     /// @param motor_port The port the motor is plugged into
     /// @param encoder_pin The pin the encoder is plugged into
-    /// @param correction_factor The correction factor for the motor
-    Motor(FEHMotor::FEHMotorPort motor_port,
-          FEHIO::FEHIOPin encoder_pin,
-          double correction_factor);
+    Motor(FEHMotor::FEHMotorPort motor_port, FEHIO::FEHIOPin encoder_pin);
 
     /// Sets the power of the motor
     /// @param power The power to set the motor to between -1 and 1
@@ -130,8 +127,11 @@ class Motor {
     /// @return The distance the motor has traveled in inches
     double get_distance();
 
-    /// Resets the encoder
+    /// Resets the encoder and sets motor power to 0
     void flush();
+
+    /// The correction factor for the motor
+    double correction_factor = 1;
 
    private:
     /// The underlying motor
@@ -140,11 +140,8 @@ class Motor {
     /// The shaft encoder for the motor
     DigitalEncoder encoder;
 
-    /// The correction factor for the motor
-    double correction_factor;
-
     /// The last power set for the motor
-    double power;
+    double power = 0;
 };
 
 /// Base class for all steps
@@ -501,6 +498,14 @@ class LogUI : public UIWindow {
     Navbar& navbar;
 };
 
+class Calibrator {
+   public:
+    bool calibrate_motors();
+
+   private:
+    double calibration_start_time = 0;
+};
+
 /// UI helper class for displaying miscellaneous UI components
 class MiscUI : public UIWindow {
    public:
@@ -538,21 +543,26 @@ class MiscUI : public UIWindow {
     void update_motor_button_ui(std::unique_ptr<TouchableRegion>& region,
                                 double& start_time);
 
-    /// Helper function to calibrate a motor
-    void calibrate(Motor& motor, double& start_time);
+    // Helper function to count the distance a motor has traveled over some
+    // period of time
+    void count_single_motor(Motor& motor, double& start_time);
+
+    std::unique_ptr<TouchableRegion> calibrator_region;
+    Calibrator calibrator;
+    bool is_calibrated = true;
 
     /// The active navbar
     Navbar& navbar;
 };
 
 /// Global first motor
-inline Motor m1(FEHMotor::Motor0, FEHIO::P3_5, 1);
+inline Motor m1(FEHMotor::Motor0, FEHIO::P3_5);
 
 /// Global second motor
-inline Motor m2(FEHMotor::Motor1, FEHIO::P3_3, 1);
+inline Motor m2(FEHMotor::Motor1, FEHIO::P3_3);
 
 /// Global third motor
-inline Motor m3(FEHMotor::Motor2, FEHIO::P3_1, 1);
+inline Motor m3(FEHMotor::Motor2, FEHIO::P3_1);
 
 /// Global cds cell for light detection
 inline AnalogInputPin cds(FEHIO::P3_7);
