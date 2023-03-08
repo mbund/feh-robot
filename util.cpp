@@ -4,10 +4,12 @@
 
 #include <FEHBattery.h>
 #include <FEHLCD.h>
+#include <FEHSD.h>
 #include <FEHUtility.h>
 #include <LCDColors.h>
 
 #include <algorithm>
+#include <memory>
 #include <sstream>
 
 #include "FEHIO.h"
@@ -36,6 +38,15 @@ void Log::info(std::string message,
     long_message << "[" << TimeNow() << "|" << file << "|" << pretty_function
                  << "|" << line << "] " << message;
     long_messages.push_back(long_message.str());
+}
+
+void Log::write() {
+    LOG_INFO("writing log to file");
+    auto file = SD.FOpen("log.txt", "a");
+    for (const auto& message : long_messages)
+        SD.FPrintf(file, "%s\n", message.c_str());
+    SD.FClose(file);
+    long_messages.clear();
 }
 
 Motor::Motor(FEHMotor::FEHMotorPort port, FEHIO::FEHIOPin encoder_pin)
@@ -174,10 +185,13 @@ bool Timeline::timestep(double dt) {
     else
         return false;
 
-    auto& step = steps[current_step_index];
-    step->t_end = t;
-    if (step->execute(t)) {
-        current_step_index++;
+    steps[current_step_index]->t_end = t;
+    if (steps[current_step_index]->execute(t)) {
+        if (steps[current_step_index]->ephemeral) {
+            steps.erase(steps.begin() + current_step_index);
+        } else {
+            current_step_index++;
+        }
 
         if (current_step_index < steps.size()) {
             m1.flush();
@@ -258,8 +272,8 @@ PlayPauseButton::PlayPauseButton(Rect bounding_box,
         []() {});
 }
 
-TimelineUI::TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar)
-    : UIWindow(bounds), timeline(timeline), navbar(navbar) {
+TimelineUI::TimelineUI(Rect bounds, Navbar& navbar)
+    : UIWindow(bounds), navbar(navbar) {
     region_page_up = std::make_unique<TouchableRegion>(
         Rect(bounds.x + bounds.width - BUTTON_MEASURE,
              bounds.y - 1,
@@ -278,7 +292,7 @@ TimelineUI::TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar)
              BUTTON_MEASURE,
              BUTTON_MEASURE),
         [&]() {
-            if (scroll_index < timeline.steps.size() - 6)
+            if (scroll_index < timeline->steps.size() - 6)
                 scroll_index++;
             paginate();
         },
@@ -291,12 +305,12 @@ TimelineUI::TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar)
              BUTTON_MEASURE),
         [&](PlayPauseButton::State state) {
             if (state == PlayPauseButton::Play) {
-                timeline.is_playing = true;
+                timeline->is_playing = true;
             } else if (state == PlayPauseButton::Pause) {
                 m1.drive(0);
                 m2.drive(0);
                 m3.drive(0);
-                timeline.is_playing = false;
+                timeline->is_playing = false;
             }
 
             return state == PlayPauseButton::Play ? PlayPauseButton::Pause
@@ -310,7 +324,7 @@ TimelineUI::TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar)
                       FONT_HEIGHT * 2 + 3);
     for (size_t i = 0;
          i < std::min(
-                 timeline.steps.size(),
+                 timeline->steps.size(),
                  static_cast<std::vector<std::shared_ptr<Step>>::size_type>(6));
          i++) {
         const auto PLAY_BUTTON_MEASURE = block.height;
@@ -322,12 +336,12 @@ TimelineUI::TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar)
             play_rect,
             [&, i](PlayPauseButton::State state) {
                 if (state == PlayPauseButton::Play) {
-                    prev_timeline_step_index = timeline.current_step_index;
-                    timeline.is_playing = true;
-                    timeline.current_step_index = scroll_index + i;
-                    auto& step = timeline.steps[timeline.current_step_index];
-                    step->t_start = timeline.t;
-                    step->t_end = timeline.t;
+                    prev_timeline_step_index = timeline->current_step_index;
+                    timeline->is_playing = true;
+                    timeline->current_step_index = scroll_index + i;
+                    auto& step = timeline->steps[timeline->current_step_index];
+                    step->t_start = timeline->t;
+                    step->t_end = timeline->t;
                     m1.flush();
                     m2.flush();
                     m3.flush();
@@ -390,9 +404,9 @@ void TimelineUI::render() {
                       bounds.width - BUTTON_MEASURE - 1,
                       FONT_HEIGHT * 2 + 3);
     for (size_t i = scroll_index;
-         i < std::min(timeline.steps.size(), scroll_index + 6);
+         i < std::min(timeline->steps.size(), scroll_index + 6);
          i++) {
-        auto& step = timeline.steps[i];
+        auto& step = timeline->steps[i];
         LCD.DrawRectangle(block.x, block.y, block.width, block.height);
         LCD.WriteAt(step->name.substr(0, 20).c_str(), block.x + 1, block.y + 3);
         LCD.WriteAt("t=", block.x + 1, block.y + 2 + FONT_HEIGHT);
@@ -416,7 +430,7 @@ void TimelineUI::update() {
     if (navbar.current_selected != 0)
         return;
 
-    if (timeline.current_step_index >= timeline.steps.size())
+    if (timeline->current_step_index >= timeline->steps.size())
         return;
 
     region_page_up->update();
@@ -425,8 +439,15 @@ void TimelineUI::update() {
     for (auto& button : button_play_steps)
         button->update();
 
-    if (timeline.current_step_index != prev_timeline_step_index) {
-        if (!timeline.is_playing) {
+    // rerender if any steps were added or removed
+    if (timeline->steps.size() != prev_timeline_size) {
+        prev_timeline_size = timeline->steps.size();
+        paginate();
+    }
+
+    // if the a different step is being played than before, update the UI
+    if (timeline->current_step_index != prev_timeline_step_index) {
+        if (!timeline->is_playing) {
             button_pause_play->current_state = PlayPauseButton::State::Play;
             button_pause_play->render();
         }
@@ -471,9 +492,9 @@ void TimelineUI::update() {
         }
 
         // automatically scroll if needed
-        if (timeline.current_step_index > prev_timeline_step_index &&
-            timeline.current_step_index >= scroll_index + 6) {
-            if (scroll_index < timeline.steps.size() - 6)
+        if (timeline->current_step_index > prev_timeline_step_index &&
+            timeline->current_step_index >= scroll_index + 6) {
+            if (scroll_index < timeline->steps.size() - 6)
                 scroll_index++;
             paginate();
         }
@@ -486,7 +507,7 @@ void TimelineUI::update() {
                                    bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * i,
                                    bounds.width - BUTTON_MEASURE - 1,
                                    FONT_HEIGHT * 2 + 3);
-            auto& step = timeline.steps[prev_timeline_step_index];
+            auto& step = timeline->steps[prev_timeline_step_index];
 
             LCD.SetFontColor(WHITE);
             std::stringstream time_stream;
@@ -499,12 +520,12 @@ void TimelineUI::update() {
         }
     }
 
-    prev_timeline_step_index = timeline.current_step_index;
+    prev_timeline_step_index = timeline->current_step_index;
 
-    LCD.SetFontColor(timeline.is_playing ? GREEN : RED);
+    LCD.SetFontColor(timeline->is_playing ? GREEN : RED);
 
     // set top status indicator
-    if (timeline.current_step_index < scroll_index) {
+    if (timeline->current_step_index < scroll_index) {
         auto step_block = Rect(1,
                                bounds.y - 1,
                                bounds.width - BUTTON_MEASURE - 1,
@@ -518,7 +539,7 @@ void TimelineUI::update() {
     }
 
     // set bottom status indicator
-    if (timeline.current_step_index >= scroll_index + 6) {
+    if (timeline->current_step_index >= scroll_index + 6) {
         auto step_block = Rect(1,
                                bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * 5,
                                bounds.width - BUTTON_MEASURE - 1,
@@ -531,12 +552,12 @@ void TimelineUI::update() {
         return;
     }
 
-    const auto i = timeline.current_step_index - scroll_index;
+    const auto i = timeline->current_step_index - scroll_index;
     auto step_block = Rect(1,
                            bounds.y - 1 + (FONT_HEIGHT * 2 + 3 - 1) * i,
                            bounds.width - BUTTON_MEASURE - 1,
                            FONT_HEIGHT * 2 + 3);
-    auto& step = timeline.steps[timeline.current_step_index];
+    auto& step = timeline->steps[timeline->current_step_index];
 
     LCD.SetFontColor(WHITE);
     std::stringstream time_stream;
@@ -547,7 +568,7 @@ void TimelineUI::update() {
                 step_block.x + 1 + (FONT_WIDTH * 2),
                 step_block.y + 2 + FONT_HEIGHT);
 
-    LCD.SetFontColor(timeline.is_playing ? GREEN : RED);
+    LCD.SetFontColor(timeline->is_playing ? GREEN : RED);
     LCD.FillCircle(step_block.x + step_block.width - BUTTON_MEASURE - 15,
                    step_block.y + step_block.height - 12,
                    5);
@@ -561,9 +582,9 @@ void TimelineUI::paginate() {
                       bounds.width - BUTTON_MEASURE - 1,
                       FONT_HEIGHT * 2 + 3);
     for (size_t i = scroll_index;
-         i < std::min(timeline.steps.size(), scroll_index + 6);
+         i < std::min(timeline->steps.size(), scroll_index + 6);
          i++) {
-        auto& step = timeline.steps[i];
+        auto& step = timeline->steps[i];
         LCD.SetFontColor(BLACK);
         const auto& name = step->name.substr(0, 20);
         const auto name_font_length = name.length() * FONT_WIDTH;
@@ -671,9 +692,13 @@ MiscUI::MiscUI(Rect bounds, Navbar& navbar) : UIWindow(bounds), navbar(navbar) {
         m3_start_time = TimeNow();
     });
 
-    const auto calibrator_rect = Rect(100, 100, BUTTON_MEASURE, BUTTON_MEASURE);
+    const auto calibrator_rect = Rect(100, 200, BUTTON_MEASURE, BUTTON_MEASURE);
     calibrator_region = std::make_unique<TouchableRegion>(
         calibrator_rect, [this]() { is_calibrated = false; });
+
+    const auto log_write_rect = Rect(200, 200, BUTTON_MEASURE, BUTTON_MEASURE);
+    log_write_region = std::make_unique<TouchableRegion>(
+        log_write_rect, []() { logger->write(); });
 }
 
 void MiscUI::render() {
@@ -718,6 +743,12 @@ void MiscUI::render() {
                       calibrator_region->rect.y,
                       calibrator_region->rect.width,
                       calibrator_region->rect.height);
+
+    LCD.SetFontColor(WHITE);
+    LCD.DrawRectangle(log_write_region->rect.x,
+                      log_write_region->rect.y,
+                      log_write_region->rect.width,
+                      log_write_region->rect.height);
 
     update();
 }
@@ -773,7 +804,7 @@ bool Calibrator::calibrate_motors() {
     m2.flush();
     m3.flush();
 
-    constexpr auto DIST_THRESHOLD = 0.25;
+    constexpr auto DIST_THRESHOLD = 0.2;
     if (std::abs(d1 - d2) < DIST_THRESHOLD &&
         std::abs(d1 - d3) < DIST_THRESHOLD &&
         std::abs(d2 - d3) < DIST_THRESHOLD) {
@@ -799,6 +830,8 @@ void MiscUI::update() {
     if (!is_calibrated) {
         is_calibrated = calibrator.calibrate_motors();
     }
+
+    log_write_region->update();
 
     count_single_motor(m1, m1_start_time);
     count_single_motor(m2, m2_start_time);

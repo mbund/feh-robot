@@ -7,7 +7,15 @@
 #include <FEHUtility.h>
 #include <LCDColors.h>
 
+// allow us to access private members of FEHSD and initialize it ourselves, so
+// that we can clear the screen after it forcefully writes to it. This is really
+// janky and I wish that this did not have to happen.
+#define private public
+#include <FEHSD.h>
+#undef private
+
 #include <cmath>
+#include <memory>
 #include <vector>
 
 #include "util.h"
@@ -183,48 +191,29 @@ class TicketKioskStep : public Step {
     TicketKioskStep(std::string name);
 
     bool execute(double t) override;
-
-   private:
-    TranslateStep left_move_1;
-    TranslateStep left_move_2;
-    TranslateStep right_move_1;
-    TranslateStep right_move_2;
-    enum State { NONE, LEFT, RIGHT };
-
-    State state = NONE;
 };
 
-TicketKioskStep::TicketKioskStep(std::string name)
-    : Step(name),
-      left_move_1("t  6  90deg 60%", 6, deg_to_rad(90), 0.60),
-      left_move_2("t  6  90deg 60%", 6, deg_to_rad(90), 0.60),
-      right_move_1("t  6 -90deg 60%", 6, deg_to_rad(-90), 0.60),
-      right_move_2("t  6 -90deg 60%", 6, deg_to_rad(-90), 0.60) {}
+TicketKioskStep::TicketKioskStep(std::string name) : Step(name) {}
 
 bool TicketKioskStep::execute(double t) {
-    if (state == NONE) {
-        constexpr auto RED_VALUE = 0.3;
+    constexpr auto RED_VALUE = 0.3;
+    constexpr auto BLUE_VALUE = 1.0;
 
-        const auto val = cds.Value();
-        if (val < RED_VALUE) {
-            state = LEFT;
-        }
+    const auto val = cds.Value();
+    if (val < RED_VALUE) {
+        timeline->add_ephemeral_steps(
+            TranslateStep("eph 1-1", 6, deg_to_rad(90), 0.60),
+            RotateStep("eph 1-2", deg_to_rad(90), 0.60));
+        LOG_INFO("detected red " << val);
+        return true;
     }
 
-    if (state == LEFT) {
-        if (left_move_1.execute(t)) {
-            if (left_move_2.execute(t)) {
-                return true;
-            }
-        }
-    }
-
-    if (state == RIGHT) {
-        if (right_move_1.execute(t)) {
-            if (right_move_2.execute(t)) {
-                return true;
-            }
-        }
+    if (val > RED_VALUE && val < BLUE_VALUE) {
+        timeline->add_ephemeral_steps(
+            TranslateStep("eph 2-1", 6, deg_to_rad(90), 0.60),
+            RotateStep("eph 2-2", deg_to_rad(90), 0.60));
+        LOG_INFO("detected blue " << val);
+        return true;
     }
 
     return false;
@@ -232,28 +221,31 @@ bool TicketKioskStep::execute(double t) {
 
 /// Main function which is the entrypoint for the entire program
 int main() {
+    SD.Initialize();
     LOG_INFO("starting");
     LCD.Clear(BLACK);
     LCD.SetFontColor(WHITE);
 
-    Timeline timeline{
+    timeline = std::make_shared<Timeline>(
         CDSWaitStep("Wait for light"),
 
-        TranslateStep("t  6  90deg 60%", 6, deg_to_rad(90), 0.60),
-        TranslateStep("t 36 180deg 60%", 36, deg_to_rad(180), 0.60),
-        TranslateStep("t 36  90deg 90%", 12, deg_to_rad(90), 0.90),
-        TranslateStep("t  6   0deg 60%", 12, deg_to_rad(0), 0.60),
-        TranslateStep("t 12  90deg 60%", 12, deg_to_rad(90), 0.60),
+        TranslateStep("t  9  90deg 60%", 9, deg_to_rad(90), 0.60),
+        TranslateStep("t 21 180deg 60%", 21, deg_to_rad(180), 0.60),
+        TranslateStep("t 24  90deg 90%", 24, deg_to_rad(90), 0.90),
+        TranslateStep("t  5   0deg 60%", 5, deg_to_rad(0), 0.60),
+        RotateStep("r    -15deg 60%", deg_to_rad(-15), 0.60),
+        TranslateStep("t 18  90deg 60%", 18, deg_to_rad(90), 0.60),
+        TicketKioskStep("Ticket Kiosk"),
 
-        EndStep(),
-    };
+        EndStep()  // end
+    );
 
     Navbar navbar;
     Rect working_area = Rect(0,
                              navbar.bounding_box.height + 1,
                              LCD_WIDTH,
                              LCD_HEIGHT - navbar.bounding_box.height);
-    TimelineUI timeline_ui(working_area, timeline, navbar);
+    TimelineUI timeline_ui(working_area, navbar);
     LogUI log_ui(working_area, navbar);
     MiscUI misc_ui(working_area, navbar);
     navbar.add_button("Timeline", [&]() { timeline_ui.render(); });
@@ -273,7 +265,7 @@ int main() {
         touch_pressed = LCD.Touch(&touch_x, &touch_y);
 
         // advance the timeline
-        timeline.timestep(dt);
+        timeline->timestep(dt);
 
         // update all UI elements
         navbar.update();

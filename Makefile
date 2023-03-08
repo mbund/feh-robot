@@ -1,8 +1,10 @@
 TARGET=Proteus
 export TARGET
 
+SPECS = nosys.specs
+
 build:
-	$(MAKE) -C fehproteusfirmware all
+	$(MAKE) ARGS="-O2 -ffunction-sections -fdata-sections -fno-exceptions -c -fmessage-length=0 -Wno-psabi -specs=$(SPECS)" -C fehproteusfirmware all
 
 clean:
 	$(MAKE) -C fehproteusfirmware clean

@@ -100,6 +100,9 @@ class Log {
               const char* pretty_function,
               int line);
 
+    /// Write all logs to the SD card
+    void write();
+
     /// Allow the LogUI class to access the private members of the Log class
     friend class LogUI;
 
@@ -167,6 +170,10 @@ class Step {
 
     /// The time at which the step ended
     double t_end;
+
+    /// Whether the step is ephemeral, meaning it will be deleted after it is
+    /// done, or not
+    bool ephemeral = false;
 };
 
 /// Global logger
@@ -374,12 +381,18 @@ class Timeline {
     /// @return True if the timeline is finished executing
     bool timestep(double dt);
 
+    /// Add one or more steps to the timeline directly after the current step
+    /// which will each be removed after they are executed
+    /// @param ts The steps to execute in order
+    template <typename... Ts>
+    void add_ephemeral_steps(Ts&&... ts);
+
     /// Allow the timeline UI to access private members of the timeline
     friend class TimelineUI;
 
    private:
     /// The steps to execute
-    const std::vector<std::shared_ptr<Step>> steps;
+    std::vector<std::shared_ptr<Step>> steps;
 
     /// If the timeline is currently playing
     bool is_playing = false;
@@ -394,6 +407,16 @@ class Timeline {
 template <typename... Ts>
 Timeline::Timeline(Ts&&... ts)
     : steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
+
+template <typename... Ts>
+void Timeline::add_ephemeral_steps(Ts&&... ts) {
+    auto xs = make_vector_of_shared<Step>(std::forward<Ts>(ts)...);
+    for (auto x : xs)
+        x->ephemeral = true;
+    steps.insert(steps.begin() + current_step_index + 1, xs.begin(), xs.end());
+}
+
+inline std::shared_ptr<Timeline> timeline;
 
 /// Play/pause button UI component
 class PlayPauseButton {
@@ -436,7 +459,7 @@ class TimelineUI : public UIWindow {
     /// @param bounds The bounds of the window
     /// @param timeline The timeline to display
     /// @param navbar The navbar to display
-    TimelineUI(Rect bounds, Timeline& timeline, Navbar& navbar);
+    TimelineUI(Rect bounds, Navbar& navbar);
 
     /// Initial bulk render of the window (full re-render)
     void render() override;
@@ -451,8 +474,7 @@ class TimelineUI : public UIWindow {
     /// The previous step index of the timeline
     size_t prev_timeline_step_index = 0;
 
-    /// The timeline to display
-    Timeline& timeline;
+    size_t prev_timeline_size = 0;
 
     /// The active navbar
     Navbar& navbar;
@@ -550,6 +572,8 @@ class MiscUI : public UIWindow {
     std::unique_ptr<TouchableRegion> calibrator_region;
     Calibrator calibrator;
     bool is_calibrated = true;
+
+    std::unique_ptr<TouchableRegion> log_write_region;
 
     /// The active navbar
     Navbar& navbar;
