@@ -25,10 +25,10 @@
 /// @return The radian value of the degrees
 double deg_to_rad(double deg) { return deg * TAU / 360.0; }
 
-/// Translates the robot for a given duration at a given heading
+/// Translates the robot for a given distance at a given heading
 class TranslateStep : public Step {
    public:
-    /// Translate (move) the robot for a given duration at a given heading
+    /// Translate (move) the robot for a given distance at a given heading
     /// @param name The name of the step
     /// @param distance The distance of the translation in inches
     /// @param heading The heading (angle) to translate towards in radians
@@ -70,6 +70,58 @@ bool TranslateStep::execute(double t) {
             std::abs(m3.get_distance() * m3_ratio) >=
         distance) {
         LOG_INFO("moved " << distance << "in " << heading << "rad");
+        return true;
+    }
+
+    m1.drive(power * m1_ratio);
+    m2.drive(power * m2_ratio);
+    m3.drive(power * m3_ratio);
+
+    return false;
+}
+
+/// Translates the robot for a given duration at a given heading
+class TranslateTimeStep : public Step {
+   public:
+    /// Translate (move) the robot for a given duration at a given heading
+    /// @param name The name of the step
+    /// @param duration The duration (time) of the translation in seconds
+    /// @param heading The heading (angle) to translate towards in radians
+    TranslateTimeStep(std::string name,
+                      double duration,
+                      double heading,
+                      double power);
+
+    /// Execute the translation step
+    bool execute(double t) override;
+
+   private:
+    double heading;
+    double duration;
+    double power;
+
+    double x;
+    double y;
+    double m1_ratio;
+    double m2_ratio;
+    double m3_ratio;
+};
+
+TranslateTimeStep::TranslateTimeStep(std::string name,
+                                     double duration,
+                                     double heading,
+                                     double power)
+    : Step(name), duration(duration), heading(heading), power(power) {
+    x = std::cos(heading);
+    y = std::sin(heading);
+    m1_ratio = (2.0 / 3.0) * x;
+    m2_ratio = -(1.0 / 3.0) * x - (1.0 / std::sqrt(3.0)) * y;
+    m3_ratio = -(1.0 / 3.0) * x + (1.0 / std::sqrt(3.0)) * y;
+}
+
+bool TranslateTimeStep::execute(double t) {
+    if (t >= t_start + duration) {
+        LOG_INFO("moved " << duration << "s " << heading << "rad");
         return true;
     }
 
@@ -196,22 +248,26 @@ class TicketKioskStep : public Step {
 TicketKioskStep::TicketKioskStep(std::string name) : Step(name) {}
 
 bool TicketKioskStep::execute(double t) {
-    constexpr auto RED_VALUE = 0.3;
-    constexpr auto BLUE_VALUE = 1.0;
+    constexpr auto RED_VALUE = 0.5;
+    constexpr auto BLUE_VALUE = 1.2;
 
     const auto val = cds.Value();
+
     if (val < RED_VALUE) {
         timeline->add_ephemeral_steps(
-            TranslateStep("eph 1-1", 6, deg_to_rad(90), 0.60),
-            RotateStep("eph 1-2", deg_to_rad(90), 0.60));
+            TranslateStep("red right", 11, deg_to_rad(0), 0.60),
+            TranslateTimeStep("red forward", 1, deg_to_rad(90), 0.30),
+            TranslateStep("red back", 3, deg_to_rad(270), 0.30),
+            TranslateStep("red left", 5, deg_to_rad(180), 0.60));
         LOG_INFO("detected red " << val);
         return true;
     }
 
     if (val > RED_VALUE && val < BLUE_VALUE) {
         timeline->add_ephemeral_steps(
-            TranslateStep("eph 2-1", 6, deg_to_rad(90), 0.60),
-            RotateStep("eph 2-2", deg_to_rad(90), 0.60));
+            TranslateStep("blue right", 5, deg_to_rad(0), 0.60),
+            TranslateTimeStep("blue forward", 1, deg_to_rad(90), 0.30),
+            TranslateStep("blue back", 3, deg_to_rad(270), 0.30));
         LOG_INFO("detected blue " << val);
         return true;
     }
@@ -229,13 +285,17 @@ int main() {
     timeline = std::make_shared<Timeline>(
         CDSWaitStep("Wait for light"),
 
-        TranslateStep("t  9  90deg 60%", 9, deg_to_rad(90), 0.60),
-        TranslateStep("t 21 180deg 60%", 21, deg_to_rad(180), 0.60),
-        TranslateStep("t 24  90deg 90%", 24, deg_to_rad(90), 0.90),
-        TranslateStep("t  5   0deg 60%", 5, deg_to_rad(0), 0.60),
-        RotateStep("r    -15deg 60%", deg_to_rad(-15), 0.60),
-        TranslateStep("t 18  90deg 60%", 18, deg_to_rad(90), 0.60),
+        TranslateStep("t  9  90deg  60%", 9, deg_to_rad(90), 0.60),
+        TranslateStep("t 20 180deg  60%", 20, deg_to_rad(180), 0.60),
+        TranslateStep("t 30  90deg 100%", 30, deg_to_rad(90), 1.00),
+        TranslateStep("t  8   0deg  60%", 8, deg_to_rad(0), 0.60),
+        TranslateStep("t 12 270deg  70%", 12, deg_to_rad(270), 0.70),
+        TranslateStep("t 19  90deg  60%", 19, deg_to_rad(90), 0.60),
+        TranslateStep("t  4 180deg  60%", 4, deg_to_rad(180), 0.60),
         TicketKioskStep("Ticket Kiosk"),
+        TranslateStep("t 12 270deg  60%", 12, deg_to_rad(270), 0.60),
+        TranslateStep("t 16   0deg  60%", 16, deg_to_rad(0), 0.60),
+        TranslateStep("t 18 270deg  60%", 18, deg_to_rad(270), 0.60),
 
         EndStep()  // end
     );
