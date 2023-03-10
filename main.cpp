@@ -248,8 +248,8 @@ class TicketKioskStep : public Step {
 TicketKioskStep::TicketKioskStep(std::string name) : Step(name) {}
 
 bool TicketKioskStep::execute(double t) {
-    constexpr auto RED_VALUE = 0.8;
-    constexpr auto BLUE_VALUE = 1.3;
+    constexpr auto RED_VALUE = 0.5;
+    constexpr auto BLUE_VALUE = 1.2;
 
     const auto val = cds.Value();
 
@@ -297,7 +297,7 @@ int main() {
         TranslateStep("t 19  90deg  60%", 19, deg_to_rad(90), 0.60),
         AnyStep("Kiosk",
                 TicketKioskStep("Ticket Kiosk"),
-                TranslateStep("Strafe", 4, deg_to_rad(180), 0.40)),
+                TranslateStep("Strafe", 8, deg_to_rad(180), 0.40)),
         TranslateStep("t 12 270deg  60%", 12, deg_to_rad(270), 0.60),
         TranslateStep("t 9 180deg  60%", 9, deg_to_rad(180), 0.60),
         TranslateStep("t 24 270deg  60%", 24, deg_to_rad(270), 0.60),
