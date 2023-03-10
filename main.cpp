@@ -248,16 +248,18 @@ class TicketKioskStep : public Step {
 TicketKioskStep::TicketKioskStep(std::string name) : Step(name) {}
 
 bool TicketKioskStep::execute(double t) {
-    constexpr auto RED_VALUE = 0.5;
-    constexpr auto BLUE_VALUE = 1.2;
+    constexpr auto RED_VALUE = 0.8;
+    constexpr auto BLUE_VALUE = 1.3;
 
     const auto val = cds.Value();
 
     if (val < RED_VALUE) {
         timeline->add_ephemeral_steps(
             TranslateStep("red right", 11, deg_to_rad(0), 0.60),
-            TranslateTimeStep("red forward", 1, deg_to_rad(90), 0.30),
-            TranslateStep("red back", 3, deg_to_rad(270), 0.30),
+            RotateStep("red rotate", deg_to_rad(180), 0.30),
+            TranslateTimeStep("red forward", 1.5, deg_to_rad(90), -0.30),
+            TranslateStep("red back", 3, deg_to_rad(90), 0.30),
+            RotateStep("red rotate", deg_to_rad(180), -0.30),
             TranslateStep("red left", 5, deg_to_rad(180), 0.60));
         LOG_INFO("detected red " << val);
         return true;
@@ -266,8 +268,10 @@ bool TicketKioskStep::execute(double t) {
     if (val > RED_VALUE && val < BLUE_VALUE) {
         timeline->add_ephemeral_steps(
             TranslateStep("blue right", 5, deg_to_rad(0), 0.60),
-            TranslateTimeStep("blue forward", 1, deg_to_rad(90), 0.30),
-            TranslateStep("blue back", 3, deg_to_rad(270), 0.30));
+            RotateStep("blue rotate", deg_to_rad(180), 0.30),
+            TranslateTimeStep("blue forward", 1.5, deg_to_rad(90), -0.30),
+            TranslateStep("blue back", 3, deg_to_rad(90), 0.30),
+            RotateStep("blue rotate", deg_to_rad(180), -0.30));
         LOG_INFO("detected blue " << val);
         return true;
     }
@@ -286,16 +290,17 @@ int main() {
         CDSWaitStep("Wait for light"),
 
         TranslateStep("t  9  90deg  60%", 9, deg_to_rad(90), 0.60),
-        TranslateStep("t 20 180deg  60%", 20, deg_to_rad(180), 0.60),
+        TranslateStep("t 20 175deg  60%", 20, deg_to_rad(175), 0.60),
         TranslateStep("t 30  90deg 100%", 30, deg_to_rad(90), 1.00),
         TranslateStep("t  8   0deg  60%", 8, deg_to_rad(0), 0.60),
-        TranslateStep("t 12 270deg  70%", 12, deg_to_rad(270), 0.70),
+        TranslateTimeStep("t 2.5s 270deg  90%", 2.5, deg_to_rad(270), 0.90),
         TranslateStep("t 19  90deg  60%", 19, deg_to_rad(90), 0.60),
-        TranslateStep("t  4 180deg  60%", 4, deg_to_rad(180), 0.60),
-        TicketKioskStep("Ticket Kiosk"),
+        AnyStep("Kiosk",
+                TicketKioskStep("Ticket Kiosk"),
+                TranslateStep("Strafe", 4, deg_to_rad(180), 0.40)),
         TranslateStep("t 12 270deg  60%", 12, deg_to_rad(270), 0.60),
-        TranslateStep("t 16   0deg  60%", 16, deg_to_rad(0), 0.60),
-        TranslateStep("t 18 270deg  60%", 18, deg_to_rad(270), 0.60),
+        TranslateStep("t 9 180deg  60%", 9, deg_to_rad(180), 0.60),
+        TranslateStep("t 24 270deg  60%", 24, deg_to_rad(270), 0.60),
 
         EndStep()  // end
     );

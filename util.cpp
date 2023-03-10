@@ -85,6 +85,15 @@ bool UnionStep::execute(double t) {
     });
 }
 
+bool AnyStep::execute(double t) {
+    for (auto& step : steps)
+        step->t_start = t_start;
+
+    return std::any_of(steps.begin(), steps.end(), [t](const auto& step) {
+        return step->execute(t);
+    });
+}
+
 UIWindow::UIWindow(Rect bounds) : bounds(bounds) {}
 
 TouchableRegion::TouchableRegion(Rect rect,

@@ -216,6 +216,27 @@ template <typename... Ts>
 UnionStep::UnionStep(std::string name, Ts&&... ts)
     : Step(name), steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
 
+/// Execute a set of steps in parallel
+class AnyStep : public Step {
+   public:
+    /// Constructor for a union step
+    /// @param name The name of the step
+    /// @param ts The steps to execute in parallel
+    template <typename... Ts>
+    AnyStep(std::string name, Ts&&... ts);
+
+    /// Execute the union step
+    bool execute(double t) override;
+
+   private:
+    /// The steps to execute in parallel
+    std::vector<std::shared_ptr<Step>> steps;
+};
+
+template <typename... Ts>
+AnyStep::AnyStep(std::string name, Ts&&... ts)
+    : Step(name), steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
+
 /// Represents a rectangle
 struct Rect {
     /// Default constructor for a rectangle
