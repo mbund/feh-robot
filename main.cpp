@@ -23,7 +23,7 @@
 
 #include "util.h"
 
-Servo s1(FEHServo::Servo0, 0, 0);
+Servo s1(FEHServo::Servo0, 500, 2500);
 
 /// Translates the robot for a given distance at a given heading
 class TranslateStep : public Step {
@@ -299,7 +299,7 @@ class ServoStep : public Step {
    public:
     ServoStep(std::string name, double theta);
 
-    bool execute(double t) override;
+    void start() override;
 
    private:
     double theta;
@@ -308,13 +308,7 @@ class ServoStep : public Step {
 ServoStep::ServoStep(std::string name, double theta)
     : Step(name), theta(theta) {}
 
-bool ServoStep::execute(double t) {
-    const auto lever = RPS.GetCorrectLever();
-
-    s1.set_angle(theta);
-
-    return true;
-}
+void ServoStep::start() { s1.set_angle(theta); }
 
 class FuelLeverStep : public Step {
    public:
@@ -333,14 +327,33 @@ bool FuelLeverStep::execute(double t) {
     const auto lever = RPS.GetCorrectLever();
     LOG_INFO("got rps lever " << lever);
 
+    if (lever == LEVER_RIGHT) {
+        timeline->add_ephemeral_steps(
+            //
+            ServoStep("down", deg_to_rad(180)),
+            SleepStep("sleep", 6),
+            ServoStep("up", deg_to_rad(90))
+            //
+        );
+    }
+
     if (lever == LEVER_MIDDLE) {
         timeline->add_ephemeral_steps(
-            TranslateStep(3.5, deg_to_rad(180), 0.60));
+            //
+            TranslateStep(3.5 * 1, deg_to_rad(0), 0.60),
+            ServoStep("down", deg_to_rad(180)),
+            SleepStep("sleep", 6),
+            ServoStep("up", deg_to_rad(90))
+            //
+        );
     }
 
     if (lever == LEVER_LEFT) {
         timeline->add_ephemeral_steps(
-            TranslateStep(3.5 * 2, deg_to_rad(180), 0.60));
+            TranslateStep(3.5 * 2.0, deg_to_rad(0), 0.60),
+            ServoStep("down", deg_to_rad(180)),
+            SleepStep("sleep", 6),
+            ServoStep("up", deg_to_rad(90)));
     }
 
     return true;
@@ -348,21 +361,21 @@ bool FuelLeverStep::execute(double t) {
 
 /// Main function which is the entrypoint for the entire program
 int main() {
-    FEHServo t_s1(FEHServo::Servo0);
-    t_s1.TouchCalibrate();
-
-    RPS.InitializeTouchMenu();
+    s1.set_angle(deg_to_rad(90));
     SD.Initialize();
+    // RPS.InitializeTouchMenu();
+    RPS.Initialize('A');
     LOG_INFO("starting");
     LCD.Clear(BLACK);
     LCD.SetFontColor(WHITE);
 
     timeline = std::make_shared<Timeline>(
         // begin
+        // TranslateStep(12, deg_to_rad(0), 0.90),
         CDSWaitStep("Wait for light"),
 
-        TranslateStep(9, deg_to_rad(90), 0.60),
-        TranslateStep(20, deg_to_rad(180), 0.60),
+        TranslateStep(9, deg_to_rad(270), 0.90),
+        TranslateStep(17, deg_to_rad(10), 0.90),
         FuelLeverStep("Fuel lever"),
 
         EndStep()

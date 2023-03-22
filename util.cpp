@@ -76,7 +76,7 @@ Servo::Servo(FEHServo::FEHServoPort servo_port, double min, double max)
     servo.SetMax(max);
 }
 
-void Servo::set_angle(double theta) { servo.SetDegree(deg_to_rad(theta)); }
+void Servo::set_angle(double theta) { servo.SetDegree(rad_to_deg(theta)); }
 
 Step::Step(std::string name) : t_start(0), t_end(0), name(name) {}
 
