@@ -331,10 +331,14 @@ bool FuelLeverStep::execute(double t) {
     if (lever == LEVER_LEFT) {
         timeline->add_ephemeral_steps(
             //
-            RotateStep("rotate", deg_to_rad(185), 0.30),
+            RotateStep("rotate", deg_to_rad(190), 0.30),
             ServoStep("down", deg_to_rad(180)),
-            SleepStep("sleep", 6),
-            ServoStep("up", deg_to_rad(90))
+            SleepStep("sleep", 1),
+            TranslateStep(3, deg_to_rad(270), 0.60),
+            TranslateStep(3, deg_to_rad(90), 0.60),
+            SleepStep("sleep", 3),
+            ServoStep("up", deg_to_rad(90)),
+            TranslateStep(3, deg_to_rad(270), 0.60)
             //
         );
     }
@@ -342,22 +346,33 @@ bool FuelLeverStep::execute(double t) {
     if (lever == LEVER_MIDDLE) {
         timeline->add_ephemeral_steps(
             //
-            TranslateStep(3.5 * 1.0, deg_to_rad(180), 0.60),
-            RotateStep("rotate", deg_to_rad(185), 0.30),
+            TranslateStep(3.5, deg_to_rad(180), 0.60),
+            RotateStep("rotate", deg_to_rad(190), 0.30),
             ServoStep("down", deg_to_rad(180)),
-            SleepStep("sleep", 6),
-            ServoStep("up", deg_to_rad(90))
+            SleepStep("sleep", 1),
+            TranslateStep(3, deg_to_rad(270), 0.60),
+            TranslateStep(3, deg_to_rad(90), 0.60),
+            SleepStep("sleep", 3),
+            ServoStep("up", deg_to_rad(90)),
+            TranslateStep(3, deg_to_rad(270), 0.60)
             //
         );
     }
 
     if (lever == LEVER_RIGHT) {
         timeline->add_ephemeral_steps(
-            TranslateStep(3.5 * 2.0, deg_to_rad(180), 0.60),
-            RotateStep("rotate", deg_to_rad(185), 0.30),
+            //
+            TranslateStep(3.5, deg_to_rad(180), 0.60),
+            RotateStep("rotate", deg_to_rad(225), 0.30),
             ServoStep("down", deg_to_rad(180)),
-            SleepStep("sleep", 6),
-            ServoStep("up", deg_to_rad(90)));
+            SleepStep("sleep", 1),
+            TranslateStep(3, deg_to_rad(270), 0.60),
+            TranslateStep(3, deg_to_rad(90), 0.60),
+            SleepStep("sleep", 3),
+            ServoStep("up", deg_to_rad(90)),
+            TranslateStep(3, deg_to_rad(270), 0.60)
+            //
+        );
     }
 
     return true;
@@ -375,8 +390,8 @@ int main() {
         // begin
         CDSWaitStep("Wait for light"),
 
-        TranslateStep(9, deg_to_rad(90), 0.60),
-        TranslateStep(18.5, deg_to_rad(180), 0.60),
+        TranslateStep(11, deg_to_rad(90), 0.60),
+        TranslateStep(19, deg_to_rad(180), 0.60),
         FuelLeverStep("Fuel lever"),
 
         EndStep()
