@@ -4,8 +4,11 @@
 
 #include <FEHIO.h>
 #include <FEHLCD.h>
+#include <FEHRPS.h>
 #include <FEHUtility.h>
 #include <LCDColors.h>
+#include <sstream>
+#include "FEHServo.h"
 
 // allow us to access private members of FEHSD and initialize it ourselves, so
 // that we can clear the screen after it forcefully writes to it. This is really
@@ -20,10 +23,7 @@
 
 #include "util.h"
 
-/// Converts degrees to radians
-/// @param deg The degrees to convert
-/// @return The radian value of the degrees
-double deg_to_rad(double deg) { return deg * TAU / 360.0; }
+Servo s1(FEHServo::Servo0, 0, 0);
 
 /// Translates the robot for a given distance at a given heading
 class TranslateStep : public Step {
@@ -36,6 +36,13 @@ class TranslateStep : public Step {
                   double distance,
                   double heading,
                   double power);
+
+    /// Translate (move) the robot for a given distance at a given heading. The
+    /// name of the step will be automatically generated.
+    /// @param distance The distance of the translation in inches
+    /// @param heading The heading (angle) to translate towards in radians
+    /// @param power The power to drive the motors at
+    TranslateStep(double distance, double heading, double power);
 
     /// Execute the translation step
     bool execute(double t) override;
@@ -62,6 +69,15 @@ TranslateStep::TranslateStep(std::string name,
     m1_ratio = (2.0 / 3.0) * x;
     m2_ratio = -(1.0 / 3.0) * x - (1.0 / std::sqrt(3.0)) * y;
     m3_ratio = -(1.0 / 3.0) * x + (1.0 / std::sqrt(3.0)) * y;
+}
+
+TranslateStep::TranslateStep(double distance, double heading, double power)
+    : TranslateStep("Translate", distance, heading, power) {
+    std::stringstream ss;
+    ss.precision(2);
+    ss << "T " << distance << "in " << heading << "rad " << (power * 100.)
+       << "%";
+    this->name = ss.str();
 }
 
 bool TranslateStep::execute(double t) {
@@ -279,30 +295,78 @@ bool TicketKioskStep::execute(double t) {
     return false;
 }
 
+class ServoStep : public Step {
+   public:
+    ServoStep(std::string name, double theta);
+
+    bool execute(double t) override;
+
+   private:
+    double theta;
+};
+
+ServoStep::ServoStep(std::string name, double theta)
+    : Step(name), theta(theta) {}
+
+bool ServoStep::execute(double t) {
+    const auto lever = RPS.GetCorrectLever();
+
+    s1.set_angle(theta);
+
+    return true;
+}
+
+class FuelLeverStep : public Step {
+   public:
+    FuelLeverStep(std::string name);
+
+    bool execute(double t) override;
+};
+
+FuelLeverStep::FuelLeverStep(std::string name) : Step(name) {}
+
+constexpr auto LEVER_LEFT = 0;
+constexpr auto LEVER_MIDDLE = 1;
+constexpr auto LEVER_RIGHT = 2;
+
+bool FuelLeverStep::execute(double t) {
+    const auto lever = RPS.GetCorrectLever();
+    LOG_INFO("got rps lever " << lever);
+
+    if (lever == LEVER_MIDDLE) {
+        timeline->add_ephemeral_steps(
+            TranslateStep(3.5, deg_to_rad(180), 0.60));
+    }
+
+    if (lever == LEVER_LEFT) {
+        timeline->add_ephemeral_steps(
+            TranslateStep(3.5 * 2, deg_to_rad(180), 0.60));
+    }
+
+    return true;
+}
+
 /// Main function which is the entrypoint for the entire program
 int main() {
+    FEHServo t_s1(FEHServo::Servo0);
+    t_s1.TouchCalibrate();
+
+    RPS.InitializeTouchMenu();
     SD.Initialize();
     LOG_INFO("starting");
     LCD.Clear(BLACK);
     LCD.SetFontColor(WHITE);
 
     timeline = std::make_shared<Timeline>(
+        // begin
         CDSWaitStep("Wait for light"),
 
-        TranslateStep("t  9  90deg  60%", 9, deg_to_rad(90), 0.60),
-        TranslateStep("t 20 175deg  60%", 20, deg_to_rad(175), 0.60),
-        TranslateStep("t 30  90deg 100%", 30, deg_to_rad(90), 1.00),
-        TranslateStep("t  8   0deg  60%", 8, deg_to_rad(0), 0.60),
-        TranslateTimeStep("t 2.5s 270deg  90%", 2.5, deg_to_rad(270), 0.90),
-        TranslateStep("t 19  90deg  60%", 19, deg_to_rad(90), 0.60),
-        AnyStep("Kiosk",
-                TicketKioskStep("Ticket Kiosk"),
-                TranslateStep("Strafe", 8, deg_to_rad(180), 0.40)),
-        TranslateStep("t 12 270deg  60%", 12, deg_to_rad(270), 0.60),
-        TranslateStep("t 9 180deg  60%", 9, deg_to_rad(180), 0.60),
-        TranslateStep("t 24 270deg  60%", 24, deg_to_rad(270), 0.60),
+        TranslateStep(9, deg_to_rad(90), 0.60),
+        TranslateStep(20, deg_to_rad(180), 0.60),
+        FuelLeverStep("Fuel lever"),
 
-        EndStep()  // end
+        EndStep()
+        // end
     );
 
     Navbar navbar;

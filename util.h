@@ -6,6 +6,7 @@
 
 #include <FEHIO.h>
 #include <FEHMotor.h>
+#include <FEHServo.h>
 
 #include <functional>
 #include <memory>
@@ -67,6 +68,16 @@ inline float touch_y;
 
 /// Global variable for whether the screen is currently being touched
 inline bool touch_pressed;
+
+/// Converts degrees to radians
+/// @param deg The degrees to convert
+/// @return The radian value of the degrees
+inline double deg_to_rad(double deg) { return deg * TAU / 360.0; }
+
+/// Converts radians to degrees
+/// @param rad The radians to convert
+/// @return The degree value of the radians
+inline double rad_to_deg(double rad) { return rad * 360.0 / TAU; }
 
 /// Log information to the screen and to a file with a built in string stream
 #define LOG_INFO(message)                                                \
@@ -145,6 +156,24 @@ class Motor {
 
     /// The last power set for the motor
     double power = 0;
+};
+
+/// Wrapper for the FEHServo class
+class Servo {
+   public:
+    /// Constructor for the Servo class
+    /// @param servo_port The port the servo is plugged into
+    /// @param min The minimum value the servo can be set to (from calibration)
+    /// @param max The maximum value the servo can be set to (from calibration)
+    Servo(FEHServo::FEHServoPort servo_port, double min, double max);
+
+    /// Sets the angle of the servo
+    /// @param theta The angle to set the servo to in radians
+    void set_angle(double theta);
+
+   private:
+    /// The underlying servo
+    FEHServo servo;
 };
 
 /// Base class for all steps

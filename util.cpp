@@ -3,6 +3,7 @@
 /// @brief Utility functions and classes
 
 #include <FEHBattery.h>
+#include <FEHIO.h>
 #include <FEHLCD.h>
 #include <FEHSD.h>
 #include <FEHUtility.h>
@@ -12,7 +13,6 @@
 #include <memory>
 #include <sstream>
 
-#include "FEHIO.h"
 #include "util.h"
 
 /// Helper function to clamp a value between a lower and upper bound
@@ -69,6 +69,14 @@ void Motor::flush() {
 
     power = 0;
 }
+
+Servo::Servo(FEHServo::FEHServoPort servo_port, double min, double max)
+    : servo(servo_port) {
+    servo.SetMin(min);
+    servo.SetMax(max);
+}
+
+void Servo::set_angle(double theta) { servo.SetDegree(deg_to_rad(theta)); }
 
 Step::Step(std::string name) : t_start(0), t_end(0), name(name) {}
 
