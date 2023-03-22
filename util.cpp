@@ -5,6 +5,7 @@
 #include <FEHBattery.h>
 #include <FEHIO.h>
 #include <FEHLCD.h>
+#include <FEHRPS.h>
 #include <FEHSD.h>
 #include <FEHUtility.h>
 #include <LCDColors.h>
@@ -716,6 +717,10 @@ MiscUI::MiscUI(Rect bounds, Navbar& navbar) : UIWindow(bounds), navbar(navbar) {
     const auto log_write_rect = Rect(200, 200, BUTTON_MEASURE, BUTTON_MEASURE);
     log_write_region = std::make_unique<TouchableRegion>(
         log_write_rect, []() { logger->write(); });
+
+    const auto rps_select_rect = Rect(100, 150, BUTTON_MEASURE, BUTTON_MEASURE);
+    rps_select_region = std::make_unique<TouchableRegion>(
+        rps_select_rect, []() { RPS.InitializeTouchMenu(); });
 }
 
 void MiscUI::render() {
@@ -766,6 +771,12 @@ void MiscUI::render() {
                       log_write_region->rect.y,
                       log_write_region->rect.width,
                       log_write_region->rect.height);
+
+    LCD.SetFontColor(WHITE);
+    LCD.DrawRectangle(rps_select_region->rect.x,
+                      rps_select_region->rect.y,
+                      rps_select_region->rect.width,
+                      rps_select_region->rect.height);
 
     update();
 }
@@ -849,6 +860,7 @@ void MiscUI::update() {
     }
 
     log_write_region->update();
+    rps_select_region->update();
 
     count_single_motor(m1, m1_start_time);
     count_single_motor(m2, m2_start_time);
@@ -887,6 +899,28 @@ void MiscUI::update() {
     LCD.WriteAt(m3_distance_stream.str().c_str(),
                 bounds.x,
                 bounds.y + 2 + FONT_HEIGHT * 4);
+
+    std::stringstream correct_lever_stream;
+    correct_lever_stream << "Lever (0,1,2): " << RPS.GetCorrectLever();
+    LCD.WriteAt(correct_lever_stream.str().c_str(),
+                bounds.x,
+                bounds.y + 2 + FONT_HEIGHT * 5);
+
+    std::stringstream current_region_stream;
+    current_region_stream << "Region (A,B,C,D): " << RPS.CurrentRegionLetter();
+    LCD.WriteAt(current_region_stream.str().c_str(),
+                bounds.x,
+                bounds.y + 2 + FONT_HEIGHT * 6);
+
+    std::stringstream rps_x_stream;
+    rps_x_stream << "RPS X: " << RPS.X();
+    LCD.WriteAt(
+        rps_x_stream.str().c_str(), bounds.x, bounds.y + 2 + FONT_HEIGHT * 7);
+
+    std::stringstream rps_y_stream;
+    rps_y_stream << "RPS Y: " << RPS.Y();
+    LCD.WriteAt(
+        rps_y_stream.str().c_str(), bounds.x, bounds.y + 2 + FONT_HEIGHT * 8);
 
     update_motor_button_ui(m1_region, m1_start_time);
     update_motor_button_ui(m2_region, m2_start_time);

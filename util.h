@@ -624,6 +624,7 @@ class MiscUI : public UIWindow {
     bool is_calibrated = true;
 
     std::unique_ptr<TouchableRegion> log_write_region;
+    std::unique_ptr<TouchableRegion> rps_select_region;
 
     /// The active navbar
     Navbar& navbar;

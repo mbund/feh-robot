@@ -81,10 +81,11 @@ TranslateStep::TranslateStep(double distance, double heading, double power)
 }
 
 bool TranslateStep::execute(double t) {
+    const auto momentum_accounting = power;
     if (std::abs(m1.get_distance() * m1_ratio) +
             std::abs(m2.get_distance() * m2_ratio) +
             std::abs(m3.get_distance() * m3_ratio) >=
-        distance) {
+        distance - momentum_accounting) {
         LOG_INFO("moved " << distance << "in " << heading << "rad");
         return true;
     }
@@ -327,9 +328,10 @@ bool FuelLeverStep::execute(double t) {
     const auto lever = RPS.GetCorrectLever();
     LOG_INFO("got rps lever " << lever);
 
-    if (lever == LEVER_RIGHT) {
+    if (lever == LEVER_LEFT) {
         timeline->add_ephemeral_steps(
             //
+            RotateStep("rotate", deg_to_rad(185), 0.30),
             ServoStep("down", deg_to_rad(180)),
             SleepStep("sleep", 6),
             ServoStep("up", deg_to_rad(90))
@@ -340,7 +342,8 @@ bool FuelLeverStep::execute(double t) {
     if (lever == LEVER_MIDDLE) {
         timeline->add_ephemeral_steps(
             //
-            TranslateStep(3.5 * 1, deg_to_rad(0), 0.60),
+            TranslateStep(3.5 * 1.0, deg_to_rad(180), 0.60),
+            RotateStep("rotate", deg_to_rad(185), 0.30),
             ServoStep("down", deg_to_rad(180)),
             SleepStep("sleep", 6),
             ServoStep("up", deg_to_rad(90))
@@ -348,9 +351,10 @@ bool FuelLeverStep::execute(double t) {
         );
     }
 
-    if (lever == LEVER_LEFT) {
+    if (lever == LEVER_RIGHT) {
         timeline->add_ephemeral_steps(
-            TranslateStep(3.5 * 2.0, deg_to_rad(0), 0.60),
+            TranslateStep(3.5 * 2.0, deg_to_rad(180), 0.60),
+            RotateStep("rotate", deg_to_rad(185), 0.30),
             ServoStep("down", deg_to_rad(180)),
             SleepStep("sleep", 6),
             ServoStep("up", deg_to_rad(90)));
@@ -363,19 +367,16 @@ bool FuelLeverStep::execute(double t) {
 int main() {
     s1.set_angle(deg_to_rad(90));
     SD.Initialize();
-    // RPS.InitializeTouchMenu();
-    RPS.Initialize('A');
     LOG_INFO("starting");
     LCD.Clear(BLACK);
     LCD.SetFontColor(WHITE);
 
     timeline = std::make_shared<Timeline>(
         // begin
-        // TranslateStep(12, deg_to_rad(0), 0.90),
         CDSWaitStep("Wait for light"),
 
-        TranslateStep(9, deg_to_rad(270), 0.90),
-        TranslateStep(17, deg_to_rad(10), 0.90),
+        TranslateStep(9, deg_to_rad(90), 0.60),
+        TranslateStep(18.5, deg_to_rad(180), 0.60),
         FuelLeverStep("Fuel lever"),
 
         EndStep()
