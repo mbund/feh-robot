@@ -10,9 +10,10 @@
 #include <sstream>
 #include "FEHServo.h"
 
-// allow us to access private members of FEHSD and initialize it ourselves, so
-// that we can clear the screen after it forcefully writes to it. This is really
-// janky and I wish that this did not have to happen.
+// allow us to access private members of FEHSD and initialize it
+// ourselves, so that we can clear the screen after it forcefully
+// writes to it. This is really janky and I wish that this did not
+// have to happen.
 #define private public
 #include <FEHSD.h>
 #undef private
@@ -28,19 +29,22 @@ Servo s1(FEHServo::Servo0, 500, 2500);
 /// Translates the robot for a given distance at a given heading
 class TranslateStep : public Step {
    public:
-    /// Translate (move) the robot for a given distance at a given heading
+    /// Translate (move) the robot for a given distance at a given
+    /// heading
     /// @param name The name of the step
     /// @param distance The distance of the translation in inches
-    /// @param heading The heading (angle) to translate towards in radians
+    /// @param heading The heading (angle) to translate towards in
+    /// radians
     TranslateStep(std::string name,
                   double distance,
                   double heading,
                   double power);
 
-    /// Translate (move) the robot for a given distance at a given heading. The
-    /// name of the step will be automatically generated.
+    /// Translate (move) the robot for a given distance at a given
+    /// heading. The name of the step will be automatically generated.
     /// @param distance The distance of the translation in inches
-    /// @param heading The heading (angle) to translate towards in radians
+    /// @param heading The heading (angle) to translate towards in
+    /// radians
     /// @param power The power to drive the motors at
     TranslateStep(double distance, double heading, double power);
 
@@ -71,12 +75,14 @@ TranslateStep::TranslateStep(std::string name,
     m3_ratio = -(1.0 / 3.0) * x + (1.0 / std::sqrt(3.0)) * y;
 }
 
-TranslateStep::TranslateStep(double distance, double heading, double power)
+TranslateStep::TranslateStep(double distance,
+                             double heading,
+                             double power)
     : TranslateStep("Translate", distance, heading, power) {
     std::stringstream ss;
     ss.precision(2);
-    ss << "T " << distance << "in " << heading << "rad " << (power * 100.)
-       << "%";
+    ss << "T " << distance << "in " << heading << "rad "
+       << (power * 100.) << "%";
     this->name = ss.str();
 }
 
@@ -100,10 +106,13 @@ bool TranslateStep::execute(double t) {
 /// Translates the robot for a given duration at a given heading
 class TranslateTimeStep : public Step {
    public:
-    /// Translate (move) the robot for a given duration at a given heading
+    /// Translate (move) the robot for a given duration at a given
+    /// heading
     /// @param name The name of the step
-    /// @param duration The duration (time) of the translation in seconds
-    /// @param heading The heading (angle) to translate towards in radians
+    /// @param duration The duration (time) of the translation in
+    /// seconds
+    /// @param heading The heading (angle) to translate towards in
+    /// radians
     TranslateTimeStep(std::string name,
                       double duration,
                       double heading,
@@ -170,7 +179,8 @@ bool EndStep::execute(double t) {
 /// Waits for the cds to be below a certain value
 class CDSWaitStep : public Step {
    public:
-    /// Constructor to make a step that waits for the cds to be below a certain
+    /// Constructor to make a step that waits for the cds to be below
+    /// a certain
     /// @param name The name of the step
     CDSWaitStep(std::string name);
 
@@ -274,7 +284,8 @@ bool TicketKioskStep::execute(double t) {
         timeline->add_ephemeral_steps(
             TranslateStep("red right", 11, deg_to_rad(0), 0.60),
             RotateStep("red rotate", deg_to_rad(180), 0.30),
-            TranslateTimeStep("red forward", 1.5, deg_to_rad(90), -0.30),
+            TranslateTimeStep(
+                "red forward", 1.5, deg_to_rad(90), -0.30),
             TranslateStep("red back", 3, deg_to_rad(90), 0.30),
             RotateStep("red rotate", deg_to_rad(180), -0.30),
             TranslateStep("red left", 5, deg_to_rad(180), 0.60));
@@ -286,7 +297,8 @@ bool TicketKioskStep::execute(double t) {
         timeline->add_ephemeral_steps(
             TranslateStep("blue right", 5, deg_to_rad(0), 0.60),
             RotateStep("blue rotate", deg_to_rad(180), 0.30),
-            TranslateTimeStep("blue forward", 1.5, deg_to_rad(90), -0.30),
+            TranslateTimeStep(
+                "blue forward", 1.5, deg_to_rad(90), -0.30),
             TranslateStep("blue back", 3, deg_to_rad(90), 0.30),
             RotateStep("blue rotate", deg_to_rad(180), -0.30));
         LOG_INFO("detected blue " << val);

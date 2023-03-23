@@ -14,8 +14,8 @@
 #include <string>
 #include <vector>
 
-/// The distance between the center of the robot and the center of one of the
-/// wheels, in inches
+/// The distance between the center of the robot and the center of one
+/// of the wheels, in inches
 const auto ROBOT_CENTER_TO_WHEEL_DISTANCE = 4;
 
 /// The mathematical constant pi
@@ -37,9 +37,9 @@ constexpr auto WHEEL_CIRCUMFERENCE = TAU * WHEEL_RADIUS;
 constexpr auto IGWAN_COUNTS_PER_INCH =
     IGWAN_COUNTS_PER_REVOLUTION / WHEEL_CIRCUMFERENCE;
 
-/// Y offset in pixels for the reported touch location to the actual touch
-/// location. Our Proteus innacurately reports touch location, so we must
-/// account for it.
+/// Y offset in pixels for the reported touch location to the actual
+/// touch location. Our Proteus innacurately reports touch location,
+/// so we must account for it.
 const auto TOUCH_OFFSET_Y = -4;
 
 /// The supposed width of the LCD screen, in pixels
@@ -79,13 +79,15 @@ inline double deg_to_rad(double deg) { return deg * TAU / 360.0; }
 /// @return The degree value of the radians
 inline double rad_to_deg(double rad) { return rad * 360.0 / TAU; }
 
-/// Log information to the screen and to a file with a built in string stream
-#define LOG_INFO(message)                                                \
-    do {                                                                 \
-        std::stringstream ss;                                            \
-        ss.precision(4);                                                 \
-        ss << message;                                                   \
-        logger->info(ss.str(), __FILE__, __PRETTY_FUNCTION__, __LINE__); \
+/// Log information to the screen and to a file with a built in string
+/// stream
+#define LOG_INFO(message)                                       \
+    do {                                                        \
+        std::stringstream ss;                                   \
+        ss.precision(4);                                        \
+        ss << message;                                          \
+        logger->info(                                           \
+            ss.str(), __FILE__, __PRETTY_FUNCTION__, __LINE__); \
     } while (0)
 
 /// Log information to the screen and to a file
@@ -98,14 +100,15 @@ class Log {
     /// @param obj The object to copy
     Log(const Log& obj) = delete;
 
-    /// Log an info message. Generally use the LOG_INFO macro instead of this.
+    /// Log an info message. Generally use the LOG_INFO macro instead
+    /// of this.
     /// @param message The message to log
-    /// @param file The file the message is being logged from, typically using
-    /// the __FILE__ macro
-    /// @param pretty_function The function the message is being logged from,
-    /// typically using the __PRETTY_FUNCTION__ macro
-    /// @param line The line the message is being logged from, typically using
-    /// the  __LINE__ macro
+    /// @param file The file the message is being logged from,
+    /// typically using the __FILE__ macro
+    /// @param pretty_function The function the message is being
+    /// logged from, typically using the __PRETTY_FUNCTION__ macro
+    /// @param line The line the message is being logged from,
+    /// typically using the  __LINE__ macro
     void info(std::string message,
               const char* file,
               const char* pretty_function,
@@ -114,7 +117,8 @@ class Log {
     /// Write all logs to the SD card
     void write();
 
-    /// Allow the LogUI class to access the private members of the Log class
+    /// Allow the LogUI class to access the private members of the Log
+    /// class
     friend class LogUI;
 
    private:
@@ -131,7 +135,8 @@ class Motor {
     /// Constructor for the Motor class
     /// @param motor_port The port the motor is plugged into
     /// @param encoder_pin The pin the encoder is plugged into
-    Motor(FEHMotor::FEHMotorPort motor_port, FEHIO::FEHIOPin encoder_pin);
+    Motor(FEHMotor::FEHMotorPort motor_port,
+          FEHIO::FEHIOPin encoder_pin);
 
     /// Sets the power of the motor
     /// @param power The power to set the motor to between -1 and 1
@@ -163,8 +168,10 @@ class Servo {
    public:
     /// Constructor for the Servo class
     /// @param servo_port The port the servo is plugged into
-    /// @param min The minimum value the servo can be set to (from calibration)
-    /// @param max The maximum value the servo can be set to (from calibration)
+    /// @param min The minimum value the servo can be set to (from
+    /// calibration)
+    /// @param max The maximum value the servo can be set to (from
+    /// calibration)
     Servo(FEHServo::FEHServoPort servo_port, double min, double max);
 
     /// Sets the angle of the servo
@@ -200,8 +207,8 @@ class Step {
     /// The time at which the step ended
     double t_end;
 
-    /// Whether the step is ephemeral, meaning it will be deleted after it is
-    /// done, or not
+    /// Whether the step is ephemeral, meaning it will be deleted
+    /// after it is done, or not
     bool ephemeral = false;
 };
 
@@ -214,11 +221,12 @@ std::shared_ptr<T> make_shared(Ts&&... ts) {
     return std::shared_ptr<T>(new T{std::forward<Ts>(ts)...});
 }
 
-/// Helper template function to make a vector of shared pointers, used by the
-/// Timeline and UnionStep classes.
+/// Helper template function to make a vector of shared pointers, used
+/// by the Timeline and UnionStep classes.
 template <typename Base, typename... Ts>
 std::vector<std::shared_ptr<Base>> make_vector_of_shared(Ts&&... ts) {
-    std::shared_ptr<Base> init[] = {make_shared<Ts>(std::forward<Ts>(ts))...};
+    std::shared_ptr<Base> init[] = {
+        make_shared<Ts>(std::forward<Ts>(ts))...};
     return std::vector<std::shared_ptr<Base>>{
         std::make_move_iterator(std::begin(init)),
         std::make_move_iterator(std::end(init))};
@@ -243,7 +251,8 @@ class UnionStep : public Step {
 
 template <typename... Ts>
 UnionStep::UnionStep(std::string name, Ts&&... ts)
-    : Step(name), steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
+    : Step(name),
+      steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
 
 /// Execute a set of steps in parallel
 class AnyStep : public Step {
@@ -264,7 +273,8 @@ class AnyStep : public Step {
 
 template <typename... Ts>
 AnyStep::AnyStep(std::string name, Ts&&... ts)
-    : Step(name), steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
+    : Step(name),
+      steps(make_vector_of_shared<Step>(std::forward<Ts>(ts)...)) {}
 
 /// Represents a rectangle
 struct Rect {
@@ -317,8 +327,10 @@ class TouchableRegion {
    public:
     /// Constructor for a touchable region
     /// @param rect The rectangle that represents the region
-    /// @param on_button_enter The function to call when the button is pressed
-    /// @param on_button_exit The function to call when the button is released
+    /// @param on_button_enter The function to call when the button is
+    /// pressed
+    /// @param on_button_exit The function to call when the button is
+    /// released
     TouchableRegion(
         Rect rect,
         std::function<void()> on_button_enter = []() {},
@@ -353,7 +365,8 @@ class NavbarButton {
     /// Constructor for a navbar button
     /// @param bounding_box The bounding box of the button
     /// @param text The text to display on the button
-    /// @param on_button_down The function to call when the button is pressed
+    /// @param on_button_down The function to call when the button is
+    /// pressed
     NavbarButton(Rect bounding_box,
                  std::string text,
                  std::function<void()> on_button_down);
@@ -383,7 +396,8 @@ class Navbar {
 
     /// Add a button to the navbar
     /// @param text The text to display on the button
-    /// @param on_button_down The function to call when the button is pressed
+    /// @param on_button_down The function to call when the button is
+    /// pressed
     void add_button(const std::string& text,
                     std::function<void()> on_button_down);
 
@@ -431,13 +445,15 @@ class Timeline {
     /// @return True if the timeline is finished executing
     bool timestep(double dt);
 
-    /// Add one or more steps to the timeline directly after the current step
-    /// which will each be removed after they are executed
+    /// Add one or more steps to the timeline directly after the
+    /// current step which will each be removed after they are
+    /// executed
     /// @param ts The steps to execute in order
     template <typename... Ts>
     void add_ephemeral_steps(Ts&&... ts);
 
-    /// Allow the timeline UI to access private members of the timeline
+    /// Allow the timeline UI to access private members of the
+    /// timeline
     friend class TimelineUI;
 
    private:
@@ -463,7 +479,8 @@ void Timeline::add_ephemeral_steps(Ts&&... ts) {
     auto xs = make_vector_of_shared<Step>(std::forward<Ts>(ts)...);
     for (auto x : xs)
         x->ephemeral = true;
-    steps.insert(steps.begin() + current_step_index + 1, xs.begin(), xs.end());
+    steps.insert(
+        steps.begin() + current_step_index + 1, xs.begin(), xs.end());
 }
 
 inline std::shared_ptr<Timeline> timeline;
@@ -479,7 +496,8 @@ class PlayPauseButton {
 
     /// Constructor for the PlayPauseButton
     /// @param bounding_box The bounding box of the button
-    /// @param on_button_down The function to call when the button is pressed
+    /// @param on_button_down The function to call when the button is
+    /// pressed
     /// @param default_state The default state of the button
     PlayPauseButton(Rect bounding_box,
                     std::function<State(State)> on_button_down,
@@ -611,12 +629,14 @@ class MiscUI : public UIWindow {
     /// The time the third motor's calibration button was pressed
     double m3_start_time = 0;
 
-    /// Helper function to update the button UI of a motor during calibration
-    void update_motor_button_ui(std::unique_ptr<TouchableRegion>& region,
-                                double& start_time);
+    /// Helper function to update the button UI of a motor during
+    /// calibration
+    void update_motor_button_ui(
+        std::unique_ptr<TouchableRegion>& region,
+        double& start_time);
 
-    // Helper function to count the distance a motor has traveled over some
-    // period of time
+    // Helper function to count the distance a motor has traveled over
+    // some period of time
     void count_single_motor(Motor& motor, double& start_time);
 
     std::unique_ptr<TouchableRegion> calibrator_region;
