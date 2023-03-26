@@ -18,6 +18,6 @@ deploy: build
 ifeq ($(UNAME_S),Darwin)
 	$(MAKE) -C fehproteusfirmware deploy
 else
-	sudo cp $(TARGET).s19 $(SD_PATH)/CODE.S19 && sudo umount $(SD_PATH)
+	sudo cp $(TARGET).s19 $(SD_PATH)/CODE.S19
 endif
 endif

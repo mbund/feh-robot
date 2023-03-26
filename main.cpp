@@ -2,13 +2,14 @@
 /// @author Mark Bundschuh
 /// @brief Contains the entrypoint for the program
 
+#include <FEHBattery.h>
 #include <FEHIO.h>
 #include <FEHLCD.h>
+#include <FEHMotor.h>
 #include <FEHRPS.h>
+#include <FEHServo.h>
 #include <FEHUtility.h>
 #include <LCDColors.h>
-#include <sstream>
-#include "FEHServo.h"
 
 // allow us to access private members of FEHSD and initialize it
 // ourselves, so that we can clear the screen after it forcefully
@@ -19,428 +20,635 @@
 #undef private
 
 #include <cmath>
+#include <cstdint>
 #include <memory>
+#include <sstream>
+#include <unordered_map>
 #include <vector>
 
-#include "util.h"
+/// The distance between the center of the robot and the center of one
+/// of the wheels, in inches
+const auto ROBOT_CENTER_TO_WHEEL_DISTANCE = 4;
 
+/// The mathematical constant pi
+constexpr auto PI = 3.141592653589;
+
+/// The mathematical constant tau
+constexpr auto TAU = PI * 2;
+
+/// The number of encoder counts per revolution of an IGWAN motor
+constexpr auto IGWAN_COUNTS_PER_REVOLUTION = 318;
+
+/// The radius of one of the wheels, in inches
+constexpr auto WHEEL_RADIUS = 1.205;
+
+/// The circumference of one of the wheels, in inches
+constexpr auto WHEEL_CIRCUMFERENCE = TAU * WHEEL_RADIUS;
+
+/// The number of encoder counts per inch of travel
+constexpr auto IGWAN_COUNTS_PER_INCH =
+    IGWAN_COUNTS_PER_REVOLUTION / WHEEL_CIRCUMFERENCE;
+
+/// The supposed width of the LCD screen, in pixels
+const auto TRUE_LCD_WIDTH = 320;
+
+/// The supposed height of the LCD screen, in pixels
+const auto TRUE_LCD_HEIGHT = 240;
+
+/// The actual width of the LCD screen, in pixels
+const auto LCD_WIDTH = TRUE_LCD_WIDTH - 1;
+
+/// The actual height of the LCD screen, in pixels
+const auto LCD_HEIGHT = TRUE_LCD_HEIGHT - 2;
+
+/// Converts degrees to radians
+/// @param deg The degrees to convert
+/// @return The radian value of the degrees
+double deg_to_rad(double deg) { return deg * TAU / 360.0; }
+
+/// Converts radians to degrees
+/// @param rad The radians to convert
+/// @return The degree value of the radians
+double rad_to_deg(double rad) { return rad * 360.0 / TAU; }
+
+/// Helper function to clamp a value between a lower and upper bound
+/// @param n The value to clamp
+/// @param lower The lower bound
+/// @param upper The upper bound
+template <typename T>
+T clamp(const T& n, const T& lower, const T& upper) {
+    return std::max(lower, std::min(n, upper));
+}
+
+/// Log information to the screen and to a file with a built in string
+/// stream
+#define LOG_INFO(message)                                       \
+    do {                                                        \
+        std::stringstream ss;                                   \
+        ss.precision(4);                                        \
+        ss << message;                                          \
+        logger->info(                                           \
+            ss.str(), __FILE__, __PRETTY_FUNCTION__, __LINE__); \
+    } while (0)
+
+/// Log information to the screen and to a file
+class Log {
+   public:
+    /// Default constructor for the Log class
+    Log();
+
+    /// Delete the copy constructor
+    /// @param obj The object to copy
+    Log(const Log& obj) = delete;
+
+    /// Log an info message. Generally use the LOG_INFO macro instead
+    /// of this.
+    /// @param message The message to log
+    /// @param file The file the message is being logged from,
+    /// typically using the __FILE__ macro
+    /// @param pretty_function The function the message is being
+    /// logged from, typically using the __PRETTY_FUNCTION__ macro
+    /// @param line The line the message is being logged from,
+    /// typically using the  __LINE__ macro
+    void info(std::string message,
+              const char* file,
+              const char* pretty_function,
+              int line);
+
+    /// Write all logs to the SD card
+    void write();
+
+    /// The short messages to display on the screen
+    std::vector<std::string> short_messages;
+
+    /// The long messages to write to the log file
+    std::vector<std::string> long_messages;
+};
+
+/// Global logger
+auto logger = std::make_shared<Log>();
+
+Log::Log() {}
+
+void Log::info(std::string message,
+               const char* file,
+               const char* pretty_function,
+               int line) {
+    std::stringstream short_message;
+    short_message << line << "|" << message;
+    short_messages.push_back(short_message.str());
+
+    std::stringstream long_message;
+    long_message << "[" << TimeNow() << "|" << file << "|"
+                 << pretty_function << "|" << line << "] " << message;
+    long_messages.push_back(long_message.str());
+}
+
+void Log::write() {
+    LOG_INFO("writing log to file");
+    auto file = SD.FOpen("log.txt", "a");
+    for (const auto& message : long_messages)
+        SD.FPrintf(file, "%s\n", message.c_str());
+    SD.FClose(file);
+    long_messages.clear();
+}
+
+/// Wrapper for the FEHMotor class
+class Motor {
+   public:
+    /// Constructor for the Motor class
+    /// @param motor_port The port the motor is plugged into
+    /// @param encoder_pin The pin the encoder is plugged into
+    Motor(FEHMotor::FEHMotorPort motor_port,
+          FEHIO::FEHIOPin encoder_pin);
+
+    /// Sets the power of the motor
+    /// @param power The power to set the motor to between -1 and 1
+    void drive(double power);
+
+    /// Gets the distance the motor has traveled in inches
+    /// @return The distance the motor has traveled in inches
+    double get_distance();
+
+    /// Resets the encoder and sets motor power to 0
+    void flush();
+
+    /// The correction factor for the motor
+    double correction_factor = 1;
+
+   private:
+    /// The underlying motor
+    FEHMotor motor;
+
+    /// The shaft encoder for the motor
+    DigitalEncoder encoder;
+
+    /// The last power set for the motor
+    double power = 0;
+};
+
+Motor::Motor(FEHMotor::FEHMotorPort port, FEHIO::FEHIOPin encoder_pin)
+    : motor(port, 9.0), encoder(encoder_pin) {
+    flush();
+}
+
+void Motor::drive(double power) {
+    this->power = clamp(power * correction_factor, -1.0, 1.0);
+    motor.SetPercent(this->power * 100.0);
+}
+
+double Motor::get_distance() {
+    return encoder.Counts() / IGWAN_COUNTS_PER_INCH;
+}
+
+void Motor::flush() {
+    motor.SetPercent(0);
+    encoder.ResetCounts();
+
+    power = 0;
+}
+
+/// Wrapper for the FEHServo class
+class Servo {
+   public:
+    /// Constructor for the Servo class
+    /// @param servo_port The port the servo is plugged into
+    /// @param min The minimum value the servo can be set to (from
+    /// calibration)
+    /// @param max The maximum value the servo can be set to (from
+    /// calibration)
+    Servo(FEHServo::FEHServoPort servo_port, double min, double max);
+
+    /// Sets the angle of the servo
+    /// @param theta The angle to set the servo to in radians
+    void set_angle(double theta);
+
+   private:
+    /// The underlying servo
+    FEHServo servo;
+};
+
+Servo::Servo(FEHServo::FEHServoPort servo_port,
+             double min,
+             double max)
+    : servo(servo_port) {
+    servo.SetMin(min);
+    servo.SetMax(max);
+}
+
+void Servo::set_angle(double theta) {
+    servo.SetDegree(rad_to_deg(theta));
+}
+
+/// Global first motor
+Motor m1(FEHMotor::Motor0, FEHIO::P3_5);
+
+/// Global second motor
+Motor m2(FEHMotor::Motor1, FEHIO::P3_3);
+
+/// Global third motor
+Motor m3(FEHMotor::Motor2, FEHIO::P3_1);
+
+/// Global cds cell for light detection
+AnalogInputPin cds(FEHIO::P3_7);
+
+/// Global servo which controls the arm
 Servo s1(FEHServo::Servo0, 500, 2500);
 
-/// Translates the robot for a given distance at a given heading
-class TranslateStep : public Step {
-   public:
-    /// Translate (move) the robot for a given distance at a given
-    /// heading
-    /// @param name The name of the step
-    /// @param distance The distance of the translation in inches
-    /// @param heading The heading (angle) to translate towards in
-    /// radians
-    TranslateStep(std::string name,
-                  double distance,
-                  double heading,
-                  double power);
-
-    /// Translate (move) the robot for a given distance at a given
-    /// heading. The name of the step will be automatically generated.
-    /// @param distance The distance of the translation in inches
-    /// @param heading The heading (angle) to translate towards in
-    /// radians
-    /// @param power The power to drive the motors at
-    TranslateStep(double distance, double heading, double power);
-
-    /// Execute the translation step
-    bool execute(double t) override;
-
-   private:
-    double heading;
-    double distance;
-    double power;
-
-    double x;
-    double y;
-    double m1_ratio;
-    double m2_ratio;
-    double m3_ratio;
+/// Global UI state type to determine what to draw to the screen
+enum UI_MENU {
+    UI_MENU_LOGS,
+    UI_MENU_DEBUG,
 };
 
-TranslateStep::TranslateStep(std::string name,
-                             double distance,
-                             double heading,
-                             double power)
-    : Step(name), distance(distance), heading(heading), power(power) {
-    x = std::cos(heading);
-    y = std::sin(heading);
-    m1_ratio = (2.0 / 3.0) * x;
-    m2_ratio = -(1.0 / 3.0) * x - (1.0 / std::sqrt(3.0)) * y;
-    m3_ratio = -(1.0 / 3.0) * x + (1.0 / std::sqrt(3.0)) * y;
+/// Global UI state variable to determine what to draw to the screen
+UI_MENU ui_select = UI_MENU_DEBUG;
+
+/// Global variable for the current background color
+unsigned int current_background_color = BLACK;
+
+/// Global variable for the current font color
+unsigned int current_font_color = WHITE;
+
+/// Sets the font color of the screen, with optimizations
+/// @param color The color to set the font to
+void set_font_color(unsigned int color) {
+    if (current_background_color != color)
+        LCD.SetFontColor(color);
 }
 
-TranslateStep::TranslateStep(double distance,
-                             double heading,
-                             double power)
-    : TranslateStep("Translate", distance, heading, power) {
-    std::stringstream ss;
-    ss.precision(2);
-    ss << "T " << distance << "in " << heading << "rad "
-       << (power * 100.) << "%";
-    this->name = ss.str();
+/// Sets the background color of the screen, with optimizations
+/// @param color The color to set the background to
+void set_background_color(unsigned int color) {
+    if (current_font_color != color)
+        LCD.SetBackgroundColor(color);
 }
 
-bool TranslateStep::execute(double t) {
-    const auto momentum_accounting = power;
-    if (std::abs(m1.get_distance() * m1_ratio) +
-            std::abs(m2.get_distance() * m2_ratio) +
-            std::abs(m3.get_distance() * m3_ratio) >=
-        distance - momentum_accounting) {
-        LOG_INFO("moved " << distance << "in " << heading << "rad");
-        return true;
+double last_touch_switch_time = 0;
+
+/// Library function to draw UI to the screen while the robot is
+/// idling
+bool idle() {
+    constexpr auto FONT_WIDTH = 12;
+    constexpr auto FONT_HEIGHT = 17;
+
+    float touch_x;
+    float touch_y;
+    bool touch_pressed = LCD.Touch(&touch_x, &touch_y);
+
+    set_background_color(BLACK);
+    set_font_color(WHITE);
+
+    if (TimeNow() - last_touch_switch_time > 0.5 && touch_pressed &&
+        touch_x > LCD_WIDTH - 50 && touch_y > LCD_HEIGHT - 50) {
+        if (ui_select == UI_MENU_LOGS)
+            ui_select = UI_MENU_DEBUG;
+        else if (ui_select == UI_MENU_DEBUG)
+            ui_select = UI_MENU_LOGS;
+
+        last_touch_switch_time = TimeNow();
+
+        LCD.Clear();
     }
+
+    if (ui_select == UI_MENU_LOGS) {
+        constexpr size_t MAX_LINES = LCD_HEIGHT / FONT_HEIGHT;
+        size_t scroll_index = 0;
+        if (logger->short_messages.size() > MAX_LINES)
+            scroll_index = logger->short_messages.size() - MAX_LINES;
+        for (size_t log_index = scroll_index, ui_index = 0;
+             log_index < scroll_index + MAX_LINES &&
+             log_index < logger->short_messages.size();
+             log_index++, ui_index++) {
+            LCD.WriteAt(logger->short_messages[log_index]
+                            .substr(0, 25)
+                            .c_str(),
+                        0,
+                        ui_index * FONT_HEIGHT);
+        }
+    }
+
+    if (ui_select == UI_MENU_DEBUG) {
+        std::stringstream battery_stream;
+        battery_stream << "Battery (0-11.7V): " << Battery.Voltage();
+        LCD.WriteAt(battery_stream.str().c_str(), 0, FONT_HEIGHT * 0);
+
+        std::stringstream cds_stream;
+        cds_stream << "Cds (0-3.3V): " << cds.Value();
+        LCD.WriteAt(cds_stream.str().c_str(), 0, FONT_HEIGHT * 1);
+
+        std::stringstream m1_distance_stream;
+        m1_distance_stream << "M1 dist (in): " << m1.get_distance();
+        LCD.WriteAt(
+            m1_distance_stream.str().c_str(), 0, FONT_HEIGHT * 2);
+
+        std::stringstream m2_distance_stream;
+        m2_distance_stream << "M2 dist (in): " << m2.get_distance();
+        LCD.WriteAt(
+            m2_distance_stream.str().c_str(), 0, FONT_HEIGHT * 3);
+
+        std::stringstream m3_distance_stream;
+        m3_distance_stream << "M3 dist (in): " << m3.get_distance();
+        LCD.WriteAt(
+            m3_distance_stream.str().c_str(), 0, FONT_HEIGHT * 4);
+
+        std::stringstream correct_lever_stream;
+        correct_lever_stream << "Lever (0,1,2): "
+                             << RPS.GetCorrectLever();
+        LCD.WriteAt(
+            correct_lever_stream.str().c_str(), 0, FONT_HEIGHT * 5);
+
+        std::stringstream current_region_stream;
+        current_region_stream << "Region (A,B,C,D): "
+                              << RPS.CurrentRegionLetter();
+        LCD.WriteAt(
+            current_region_stream.str().c_str(), 0, FONT_HEIGHT * 6);
+
+        std::stringstream rps_x_stream;
+        rps_x_stream << "RPS X: " << RPS.X();
+        LCD.WriteAt(rps_x_stream.str().c_str(), 0, FONT_HEIGHT * 7);
+
+        std::stringstream rps_y_stream;
+        rps_y_stream << "RPS Y: " << RPS.Y();
+        LCD.WriteAt(rps_y_stream.str().c_str(), 0, FONT_HEIGHT * 8);
+
+        LCD.WriteAt("W", 5, LCD_HEIGHT - FONT_HEIGHT - 5);
+        if (touch_x < 50 && touch_y > LCD_HEIGHT - 50) {
+            set_background_color(WHITE);
+            set_font_color(BLACK);
+            logger->write();
+        }
+    }
+
+    return false;
+}
+
+#define IDLE(x)       \
+    do {              \
+        if (idle())   \
+            return x; \
+    } while (0)
+
+/// Translates the robot a given distance in a given heading at a
+/// given power
+/// @param distance The distance to translate in inches
+/// @param heading The heading to translate in radians
+/// @param power The power to translate at
+void translate(double distance, double heading, double power) {
+    LOG_INFO("mov " << distance << "in " << heading << "rad "
+                    << (power * 100.) << "%");
+
+    auto x = std::cos(heading);
+    auto y = std::sin(heading);
+    auto m1_ratio = (2.0 / 3.0) * x;
+    auto m2_ratio = -(1.0 / 3.0) * x - (1.0 / std::sqrt(3.0)) * y;
+    auto m3_ratio = -(1.0 / 3.0) * x + (1.0 / std::sqrt(3.0)) * y;
 
     m1.drive(power * m1_ratio);
     m2.drive(power * m2_ratio);
     m3.drive(power * m3_ratio);
 
-    return false;
+    while (std::abs(m1.get_distance() * m1_ratio) +
+               std::abs(m2.get_distance() * m2_ratio) +
+               std::abs(m3.get_distance() * m3_ratio) <
+           distance)
+        IDLE();
 }
 
-/// Translates the robot for a given duration at a given heading
-class TranslateTimeStep : public Step {
-   public:
-    /// Translate (move) the robot for a given duration at a given
-    /// heading
-    /// @param name The name of the step
-    /// @param duration The duration (time) of the translation in
-    /// seconds
-    /// @param heading The heading (angle) to translate towards in
-    /// radians
-    TranslateTimeStep(std::string name,
-                      double duration,
-                      double heading,
-                      double power);
+/// Translates the robot for a given duration.
+/// @param duration The duration to translate for.
+/// @param heading The heading to translate in.
+/// @param power The power to translate at.
+void translate_time(double duration, double heading, double power) {
+    LOG_INFO("mov " << duration << "s " << heading << "rad "
+                    << (power * 100.) << "%");
 
-    /// Execute the translation step
-    bool execute(double t) override;
-
-   private:
-    double heading;
-    double duration;
-    double power;
-
-    double x;
-    double y;
-    double m1_ratio;
-    double m2_ratio;
-    double m3_ratio;
-};
-
-TranslateTimeStep::TranslateTimeStep(std::string name,
-                                     double duration,
-                                     double heading,
-                                     double power)
-    : Step(name), duration(duration), heading(heading), power(power) {
-    x = std::cos(heading);
-    y = std::sin(heading);
-    m1_ratio = (2.0 / 3.0) * x;
-    m2_ratio = -(1.0 / 3.0) * x - (1.0 / std::sqrt(3.0)) * y;
-    m3_ratio = -(1.0 / 3.0) * x + (1.0 / std::sqrt(3.0)) * y;
-}
-
-bool TranslateTimeStep::execute(double t) {
-    if (t >= t_start + duration) {
-        LOG_INFO("moved " << duration << "s " << heading << "rad");
-        return true;
-    }
+    auto x = std::cos(heading);
+    auto y = std::sin(heading);
+    auto m1_ratio = (2.0 / 3.0) * x;
+    auto m2_ratio = -(1.0 / 3.0) * x - (1.0 / std::sqrt(3.0)) * y;
+    auto m3_ratio = -(1.0 / 3.0) * x + (1.0 / std::sqrt(3.0)) * y;
 
     m1.drive(power * m1_ratio);
     m2.drive(power * m2_ratio);
     m3.drive(power * m3_ratio);
 
-    return false;
+    double t_start = TimeNow();
+    while (TimeNow() < t_start + duration)
+        IDLE();
 }
 
-/// Ends the program
-class EndStep : public Step {
-   public:
-    /// Constructor to make a step that ends the program
-    EndStep();
+/// Wait for the CDS to be below a certain value
+void cds_wait() {
+    LOG_INFO("waiting for cds");
 
-    /// Execute the end step
-    bool execute(double t) override;
-};
-
-EndStep::EndStep() : Step("End") {}
-
-bool EndStep::execute(double t) {
-    LOG_INFO("end");
-
-    return true;
-}
-
-/// Waits for the cds to be below a certain value
-class CDSWaitStep : public Step {
-   public:
-    /// Constructor to make a step that waits for the cds to be below
-    /// a certain
-    /// @param name The name of the step
-    CDSWaitStep(std::string name);
-
-    /// Execute the cds wait step
-    bool execute(double t) override;
-};
-
-CDSWaitStep::CDSWaitStep(std::string name) : Step(name) {}
-
-bool CDSWaitStep::execute(double t) {
     constexpr auto RED_VALUE = 0.3;
 
-    const auto val = cds.Value();
-    if (val < RED_VALUE) {
-        LOG_INFO("cds end " << val << " < " << RED_VALUE);
-        return true;
+    auto val = cds.Value();
+    while (val >= RED_VALUE) {
+        val = cds.Value();
+        IDLE();
     }
 
-    return false;
+    LOG_INFO("cds end " << val << " < " << RED_VALUE);
 }
 
-/// Rotate the robot for a given duration by a given angle
-class RotateStep : public Step {
-   public:
-    /// Rotate the robot for a given duration by a given angle
-    /// @param name The name of the step
-    /// @param theta The angle to rotate by
-    RotateStep(std::string name, double theta, double power);
+/// Wait for a touch event
+void touch_wait() {
+    float touch_x;
+    float touch_y;
+    while (!LCD.Touch(&touch_x, &touch_y))
+        IDLE();
 
-    /// Execute the rotation step
-    bool execute(double t) override;
-
-   private:
-    double theta;
-    double power;
-
-    double distance;
-};
-
-RotateStep::RotateStep(std::string name, double theta, double power)
-    : Step(name), theta(theta), power(power) {
-    distance = ROBOT_CENTER_TO_WHEEL_DISTANCE * theta;
+    LOG_INFO("got touch");
 }
 
-bool RotateStep::execute(double t) {
-    if (m1.get_distance() + m2.get_distance() + m3.get_distance() >=
-        distance * 3 * (std::sqrt(3.0) / 2.0)) {
-        LOG_INFO("rotated " << theta << "rad");
-        return true;
-    }
+/// Rotate the robot by a given angle in radians at a given power
+/// @param theta Angle in radians
+/// @param power Power in the range [0, 1]
+void rotate(double theta, double power) {
+    LOG_INFO("rot " << theta << "rad " << (power * 100.) << "%");
+
+    const auto distance = ROBOT_CENTER_TO_WHEEL_DISTANCE * theta;
 
     m1.drive(power);
     m2.drive(power);
     m3.drive(power);
 
-    return false;
+    if (m1.get_distance() + m2.get_distance() + m3.get_distance() <
+        distance * 3 * (std::sqrt(3.0) / 2.0))
+        IDLE();
 }
 
-/// Sleeps for a given duration
-class SleepStep : public Step {
-   public:
-    /// Sleeps for a given duration
-    /// @param name The name of the step
-    /// @param duration The duration of the rotation
-    SleepStep(std::string name, double duration);
+/// Sleep for a duration
+/// @param duration Duration in seconds
+void sleep(double duration) {
+    LOG_INFO("sleep " << duration << "s");
 
-    /// Execute the rotation step
-    bool execute(double t) override;
-
-   private:
-    double duration;
-};
-
-SleepStep::SleepStep(std::string name, double duration)
-    : Step(name), duration(duration) {}
-
-bool SleepStep::execute(double t) {
-    if (t >= t_start + duration) {
-        LOG_INFO("slept " << duration << "s");
-    }
-
-    return t >= t_start + duration;
+    double t_start = TimeNow();
+    while (TimeNow() < t_start + duration)
+        IDLE();
 }
 
-class TicketKioskStep : public Step {
-   public:
-    TicketKioskStep(std::string name);
-
-    bool execute(double t) override;
-};
-
-TicketKioskStep::TicketKioskStep(std::string name) : Step(name) {}
-
-bool TicketKioskStep::execute(double t) {
+/// Ticket kiosk task
+void ticket_kiosk() {
     constexpr auto RED_VALUE = 0.5;
     constexpr auto BLUE_VALUE = 1.2;
 
-    const auto val = cds.Value();
+    while (true) {
+        const auto val = cds.Value();
 
-    if (val < RED_VALUE) {
-        timeline->add_ephemeral_steps(
-            TranslateStep("red right", 11, deg_to_rad(0), 0.60),
-            RotateStep("red rotate", deg_to_rad(180), 0.30),
-            TranslateTimeStep(
-                "red forward", 1.5, deg_to_rad(90), -0.30),
-            TranslateStep("red back", 3, deg_to_rad(90), 0.30),
-            RotateStep("red rotate", deg_to_rad(180), -0.30),
-            TranslateStep("red left", 5, deg_to_rad(180), 0.60));
-        LOG_INFO("detected red " << val);
-        return true;
+        if (val < RED_VALUE) {
+            LOG_INFO("detected red " << val);
+
+            translate(11, deg_to_rad(0), 0.60);
+
+            rotate(deg_to_rad(180), 0.30);
+            translate_time(1.5, deg_to_rad(90), -0.30);
+            translate(3, deg_to_rad(90), 0.30);
+
+            rotate(deg_to_rad(180), -0.30);
+
+            translate(5, deg_to_rad(180), 0.60);
+
+            break;
+        } else if (val > RED_VALUE && val < BLUE_VALUE) {
+            LOG_INFO("detected blue " << val);
+
+            translate(5, deg_to_rad(0), 0.60);
+
+            rotate(deg_to_rad(180), 0.30);
+            translate_time(1.5, deg_to_rad(90), -0.30);
+            translate(3, deg_to_rad(90), 0.30);
+
+            rotate(deg_to_rad(180), -0.30);
+
+            break;
+        }
+
+        IDLE();
     }
-
-    if (val > RED_VALUE && val < BLUE_VALUE) {
-        timeline->add_ephemeral_steps(
-            TranslateStep("blue right", 5, deg_to_rad(0), 0.60),
-            RotateStep("blue rotate", deg_to_rad(180), 0.30),
-            TranslateTimeStep(
-                "blue forward", 1.5, deg_to_rad(90), -0.30),
-            TranslateStep("blue back", 3, deg_to_rad(90), 0.30),
-            RotateStep("blue rotate", deg_to_rad(180), -0.30));
-        LOG_INFO("detected blue " << val);
-        return true;
-    }
-
-    return false;
 }
 
-class ServoStep : public Step {
-   public:
-    ServoStep(std::string name, double theta);
+/// Fuel lever task
+void fuel_lever() {
+    constexpr auto LEVER_A = 0;
+    constexpr auto LEVER_A1 = 1;
+    constexpr auto LEVER_B = 2;
 
-    void start() override;
+    while (true) {
+        const auto lever = RPS.GetCorrectLever();
+        LOG_INFO("got rps lever " << lever);
 
-   private:
-    double theta;
-};
+        if (lever == LEVER_A) {
+            rotate(deg_to_rad(190), 0.30);
+            s1.set_angle(180);
+            sleep(1);
+            translate(3, deg_to_rad(270), 0.60);
+            translate(3, deg_to_rad(90), 0.60);
+            sleep(3);
+            s1.set_angle(90);
+            translate(3, deg_to_rad(270), 0.60);
 
-ServoStep::ServoStep(std::string name, double theta)
-    : Step(name), theta(theta) {}
+            break;
+        }
 
-void ServoStep::start() { s1.set_angle(theta); }
+        if (lever == LEVER_A1) {
+            translate(3.5, deg_to_rad(180), 0.60);
+            rotate(deg_to_rad(190), 0.30);
+            s1.set_angle(180);
+            sleep(1);
+            translate(3, deg_to_rad(270), 0.60);
+            translate(3, deg_to_rad(90), 0.60);
+            sleep(3);
+            s1.set_angle(90);
+            translate(3, deg_to_rad(270), 0.60);
 
-class FuelLeverStep : public Step {
-   public:
-    FuelLeverStep(std::string name);
+            break;
+        }
 
-    bool execute(double t) override;
-};
+        if (lever == LEVER_B) {
+            translate(3.5, deg_to_rad(180), 0.60);
+            rotate(deg_to_rad(225), 0.30);
+            s1.set_angle(180);
+            sleep(1);
+            translate(3, deg_to_rad(270), 0.60);
+            translate(3, deg_to_rad(90), 0.60);
+            sleep(3);
+            s1.set_angle(90);
+            translate(3, deg_to_rad(270), 0.60);
 
-FuelLeverStep::FuelLeverStep(std::string name) : Step(name) {}
+            break;
+        }
 
-constexpr auto LEVER_LEFT = 0;
-constexpr auto LEVER_MIDDLE = 1;
-constexpr auto LEVER_RIGHT = 2;
-
-bool FuelLeverStep::execute(double t) {
-    const auto lever = RPS.GetCorrectLever();
-    LOG_INFO("got rps lever " << lever);
-
-    if (lever == LEVER_LEFT) {
-        timeline->add_ephemeral_steps(
-            //
-            RotateStep("rotate", deg_to_rad(190), 0.30),
-            ServoStep("down", deg_to_rad(180)),
-            SleepStep("sleep", 1),
-            TranslateStep(3, deg_to_rad(270), 0.60),
-            TranslateStep(3, deg_to_rad(90), 0.60),
-            SleepStep("sleep", 3),
-            ServoStep("up", deg_to_rad(90)),
-            TranslateStep(3, deg_to_rad(270), 0.60)
-            //
-        );
+        IDLE();
     }
+}
 
-    if (lever == LEVER_MIDDLE) {
-        timeline->add_ephemeral_steps(
-            //
-            TranslateStep(3.5, deg_to_rad(180), 0.60),
-            RotateStep("rotate", deg_to_rad(190), 0.30),
-            ServoStep("down", deg_to_rad(180)),
-            SleepStep("sleep", 1),
-            TranslateStep(3, deg_to_rad(270), 0.60),
-            TranslateStep(3, deg_to_rad(90), 0.60),
-            SleepStep("sleep", 3),
-            ServoStep("up", deg_to_rad(90)),
-            TranslateStep(3, deg_to_rad(270), 0.60)
-            //
-        );
+/// Calibrate the motors by driving them at a constant speed for a few
+/// seconds and then backing down the motor ratios until the three
+/// motors are all within a threshold of each other.
+void calibrate() {
+    constexpr auto DIST_THRESHOLD = 0.2;
+    constexpr auto CORRECTION_FACTOR_ADJUSTMENT = 0.005;
+
+    while (true) {
+        m1.flush();
+        m2.flush();
+        m3.flush();
+
+        m1.drive(0.2);
+        m2.drive(0.2);
+        m3.drive(0.2);
+
+        sleep(2);
+
+        const double d1 = m1.get_distance();
+        const double d2 = m2.get_distance();
+        const double d3 = m3.get_distance();
+
+        if (std::abs(d1 - d2) < DIST_THRESHOLD &&
+            std::abs(d1 - d3) < DIST_THRESHOLD &&
+            std::abs(d2 - d3) < DIST_THRESHOLD) {
+            LOG_INFO("calibrated");
+            m1.flush();
+            m2.flush();
+            m3.flush();
+            break;
+        }
+
+        LOG_INFO("calibrating");
+
+        const auto max_distance = std::max(d1, std::max(d2, d3));
+
+        if (d1 == max_distance)
+            m1.correction_factor -= CORRECTION_FACTOR_ADJUSTMENT;
+        if (d2 == max_distance)
+            m2.correction_factor -= CORRECTION_FACTOR_ADJUSTMENT;
+        if (d3 == max_distance)
+            m3.correction_factor -= CORRECTION_FACTOR_ADJUSTMENT;
     }
-
-    if (lever == LEVER_RIGHT) {
-        timeline->add_ephemeral_steps(
-            //
-            TranslateStep(3.5, deg_to_rad(180), 0.60),
-            RotateStep("rotate", deg_to_rad(225), 0.30),
-            ServoStep("down", deg_to_rad(180)),
-            SleepStep("sleep", 1),
-            TranslateStep(3, deg_to_rad(270), 0.60),
-            TranslateStep(3, deg_to_rad(90), 0.60),
-            SleepStep("sleep", 3),
-            ServoStep("up", deg_to_rad(90)),
-            TranslateStep(3, deg_to_rad(270), 0.60)
-            //
-        );
-    }
-
-    return true;
 }
 
 /// Main function which is the entrypoint for the entire program
 int main() {
     s1.set_angle(deg_to_rad(90));
     SD.Initialize();
-    LOG_INFO("starting");
+    // RPS.InitializeTouchMenu();
+
     LCD.Clear(BLACK);
     LCD.SetFontColor(WHITE);
 
-    timeline = std::make_shared<Timeline>(
-        // begin
-        CDSWaitStep("Wait for light"),
+    LOG_INFO("starting");
 
-        TranslateStep(11, deg_to_rad(90), 0.60),
-        TranslateStep(19, deg_to_rad(180), 0.60),
-        FuelLeverStep("Fuel lever"),
-
-        EndStep()
-        // end
-    );
-
-    Navbar navbar;
-    Rect working_area = Rect(0,
-                             navbar.bounding_box.height + 1,
-                             LCD_WIDTH,
-                             LCD_HEIGHT - navbar.bounding_box.height);
-    TimelineUI timeline_ui(working_area, navbar);
-    LogUI log_ui(working_area, navbar);
-    MiscUI misc_ui(working_area, navbar);
-    navbar.add_button("Timeline", [&]() { timeline_ui.render(); });
-    navbar.add_button("Logs", [&]() { log_ui.render(); });
-    navbar.add_button("Misc", [&]() { misc_ui.render(); });
-
-    // Main loop
-    auto t = 0.0;
-    auto current_time = TimeNow();
+    calibrate();
 
     while (true) {
-        auto new_time = TimeNow();
-        auto dt = new_time - t;
-        current_time = new_time;
-        t += dt;
+        touch_wait();
+        cds_wait();
 
-        touch_pressed = LCD.Touch(&touch_x, &touch_y);
-
-        // advance the timeline
-        timeline->timestep(dt);
-
-        // update all UI elements
-        navbar.update();
-        timeline_ui.update();
-        log_ui.update();
-        misc_ui.update();
+        translate(11, deg_to_rad(90), 0.60);
+        translate(19, deg_to_rad(180), 0.60);
+        fuel_lever();
     }
 }
