@@ -324,11 +324,11 @@ bool idle() {
              log_index < scroll_index + MAX_LINES &&
              log_index < logger->short_messages.size();
              log_index++, ui_index++) {
-            LCD.WriteAt(logger->short_messages[log_index]
-                            .substr(0, 25)
-                            .c_str(),
-                        0,
-                        ui_index * FONT_HEIGHT);
+            constexpr auto CHARS = 26;
+            auto message =
+                logger->short_messages[log_index].substr(0, CHARS);
+            message += std::string(CHARS - message.size(), ' ');
+            LCD.WriteAt(message.c_str(), 0, ui_index * FONT_HEIGHT);
         }
     }
 
@@ -429,6 +429,10 @@ void translate(double distance, double heading, double power) {
     auto m2_ratio = -(1.0 / 3.0) * x - (1.0 / std::sqrt(3.0)) * y;
     auto m3_ratio = -(1.0 / 3.0) * x + (1.0 / std::sqrt(3.0)) * y;
 
+    m1.flush();
+    m2.flush();
+    m3.flush();
+
     m1.drive(power * m1_ratio);
     m2.drive(power * m2_ratio);
     m3.drive(power * m3_ratio);
@@ -438,6 +442,10 @@ void translate(double distance, double heading, double power) {
                std::abs(m3.get_distance() * m3_ratio) <
            distance)
         IDLE();
+
+    m1.flush();
+    m2.flush();
+    m3.flush();
 }
 
 /// Translates the robot for a given duration.
@@ -454,6 +462,10 @@ void translate_time(double duration, double heading, double power) {
     auto m2_ratio = -(1.0 / 3.0) * x - (1.0 / std::sqrt(3.0)) * y;
     auto m3_ratio = -(1.0 / 3.0) * x + (1.0 / std::sqrt(3.0)) * y;
 
+    m1.flush();
+    m2.flush();
+    m3.flush();
+
     m1.drive(power * m1_ratio);
     m2.drive(power * m2_ratio);
     m3.drive(power * m3_ratio);
@@ -461,6 +473,10 @@ void translate_time(double duration, double heading, double power) {
     double t_start = TimeNow();
     while (TimeNow() < t_start + duration)
         IDLE();
+
+    m1.flush();
+    m2.flush();
+    m3.flush();
 }
 
 /// Wait for the CDS to be below a certain value
@@ -480,12 +496,17 @@ void cds_wait() {
 
 /// Wait for a touch event
 void touch_wait() {
-    LOG_INFO("waiting for touch");
+    LOG_INFO("waiting for top touch");
 
     float touch_x;
     float touch_y;
-    while (!LCD.Touch(&touch_x, &touch_y))
+    while (true) {
+        bool touch_pressed = LCD.Touch(&touch_x, &touch_y);
+        if (touch_pressed && touch_y < 100)
+            break;
+
         IDLE();
+    }
 
     LOG_INFO("got touch");
 }
@@ -494,17 +515,26 @@ void touch_wait() {
 /// @param theta Angle in radians
 /// @param power Power in the range [0, 1]
 void rotate(double theta, double power) {
-    LOG_INFO("rot " << theta << "rad " << (power * 100.) << "%");
+    LOG_INFO("rot " << rad_to_deg(theta) << "rad " << (power * 100.)
+                    << "%");
 
     const auto distance = ROBOT_CENTER_TO_WHEEL_DISTANCE * theta;
+
+    m1.flush();
+    m2.flush();
+    m3.flush();
 
     m1.drive(power);
     m2.drive(power);
     m3.drive(power);
 
-    if (m1.get_distance() + m2.get_distance() + m3.get_distance() <
-        distance * 3 * (std::sqrt(3.0) / 2.0))
+    while (m1.get_distance() + m2.get_distance() + m3.get_distance() <
+           distance * 3 * (std::sqrt(3.0) / 2.0))
         IDLE();
+
+    m1.flush();
+    m2.flush();
+    m3.flush();
 }
 
 /// Sleep for a duration
@@ -670,6 +700,7 @@ int main() {
     while (true) {
         LOG_INFO("starting");
         touch_wait();
+
         cds_wait();
 
         translate(11, deg_to_rad(90), 0.60);
