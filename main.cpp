@@ -285,6 +285,10 @@ void set_background_color(unsigned int color) {
 }
 
 double last_touch_switch_time = 0;
+double last_write_time = 0;
+double last_calibrate_time = 0;
+
+void calibrate();
 
 /// Library function to draw UI to the screen while the robot is
 /// idling
@@ -373,10 +377,31 @@ bool idle() {
         LCD.WriteAt(rps_y_stream.str().c_str(), 0, FONT_HEIGHT * 8);
 
         LCD.WriteAt("W", 5, LCD_HEIGHT - FONT_HEIGHT - 5);
-        if (touch_x < 50 && touch_y > LCD_HEIGHT - 50) {
+        if (TimeNow() - last_write_time > 0.5 && touch_pressed &&
+            touch_x < 50 && touch_y > LCD_HEIGHT - 50) {
+            last_write_time = TimeNow();
             set_background_color(WHITE);
             set_font_color(BLACK);
             logger->write();
+        }
+
+        LCD.WriteAt("R", 5 + 50, LCD_HEIGHT - FONT_HEIGHT - 5);
+        if (touch_x > 50 && touch_x < 50 + 50 &&
+            touch_y > LCD_HEIGHT - 50) {
+            set_background_color(WHITE);
+            set_font_color(BLACK);
+            RPS.InitializeTouchMenu();
+            idle();
+        }
+
+        LCD.WriteAt("C", 5 + 100, LCD_HEIGHT - FONT_HEIGHT - 5);
+        if (TimeNow() - last_calibrate_time > 0.5 && touch_pressed &&
+            touch_x > 100 && touch_x < 50 + 100 &&
+            touch_y > LCD_HEIGHT - 50) {
+            last_calibrate_time = TimeNow();
+            set_background_color(WHITE);
+            set_font_color(BLACK);
+            calibrate();
         }
     }
 
@@ -455,6 +480,8 @@ void cds_wait() {
 
 /// Wait for a touch event
 void touch_wait() {
+    LOG_INFO("waiting for touch");
+
     float touch_x;
     float touch_y;
     while (!LCD.Touch(&touch_x, &touch_y))
@@ -634,16 +661,14 @@ void calibrate() {
 int main() {
     s1.set_angle(deg_to_rad(90));
     SD.Initialize();
-    // RPS.InitializeTouchMenu();
 
     LCD.Clear(BLACK);
     LCD.SetFontColor(WHITE);
 
-    LOG_INFO("starting");
-
-    calibrate();
+    LOG_INFO("bootstrapped");
 
     while (true) {
+        LOG_INFO("starting");
         touch_wait();
         cds_wait();
 
