@@ -257,9 +257,18 @@ Servo s1(FEHServo::Servo0, 500, 2500);
 
 /// Global UI state type to determine what to draw to the screen
 enum UI_MENU {
-    UI_MENU_LOGS,
     UI_MENU_DEBUG,
+    UI_MENU_LOGS,
+    UI_MENU_BLANK,
+    UI_MENU_MAX,
 };
+
+inline UI_MENU operator++(UI_MENU& self, int) {
+    const UI_MENU prev = self;
+    const int i = static_cast<int>(self);
+    self = static_cast<UI_MENU>((i + 1) % UI_MENU_MAX);
+    return prev;
+}
 
 /// Global UI state variable to determine what to draw to the screen
 UI_MENU ui_select = UI_MENU_DEBUG;
@@ -287,6 +296,8 @@ void set_background_color(unsigned int color) {
 double last_touch_switch_time = 0;
 double last_write_time = 0;
 double last_calibrate_time = 0;
+size_t scroll_index = 0;
+size_t num_logs = 0;
 
 void calibrate();
 
@@ -303,12 +314,13 @@ bool idle() {
     set_background_color(BLACK);
     set_font_color(WHITE);
 
+    bool rerender_logs = false;
+
     if (TimeNow() - last_touch_switch_time > 0.5 && touch_pressed &&
         touch_x > LCD_WIDTH - 50 && touch_y > LCD_HEIGHT - 50) {
+        ui_select++;
         if (ui_select == UI_MENU_LOGS)
-            ui_select = UI_MENU_DEBUG;
-        else if (ui_select == UI_MENU_DEBUG)
-            ui_select = UI_MENU_LOGS;
+            rerender_logs = true;
 
         last_touch_switch_time = TimeNow();
 
@@ -317,11 +329,18 @@ bool idle() {
 
     if (ui_select == UI_MENU_LOGS) {
         constexpr size_t MAX_LINES = LCD_HEIGHT / FONT_HEIGHT;
-        size_t scroll_index = 0;
+
+        size_t prev_scroll_index = scroll_index;
         if (logger->short_messages.size() > MAX_LINES)
             scroll_index = logger->short_messages.size() - MAX_LINES;
+
+        rerender_logs |= prev_scroll_index != scroll_index;
+        rerender_logs |= num_logs != logger->short_messages.size();
+
+        num_logs = logger->short_messages.size();
+
         for (size_t log_index = scroll_index, ui_index = 0;
-             log_index < scroll_index + MAX_LINES &&
+             rerender_logs && log_index < scroll_index + MAX_LINES &&
              log_index < logger->short_messages.size();
              log_index++, ui_index++) {
             constexpr auto CHARS = 26;
@@ -440,7 +459,7 @@ void translate(double distance, double heading, double power) {
     while (std::abs(m1.get_distance() * m1_ratio) +
                std::abs(m2.get_distance() * m2_ratio) +
                std::abs(m3.get_distance() * m3_ratio) <
-           distance)
+           distance / 2.0)
         IDLE();
 
     m1.flush();
@@ -703,8 +722,22 @@ int main() {
 
         cds_wait();
 
-        translate(11, deg_to_rad(90), 0.60);
-        translate(19, deg_to_rad(180), 0.60);
-        fuel_lever();
+        translate(6, deg_to_rad(90), 0.60);
+        translate(3, deg_to_rad(0), 0.60);
+        translate(22, deg_to_rad(90), 1.00);
+        translate(6, deg_to_rad(90), 0.60);
+        translate(16, deg_to_rad(180), 0.60);
+        rotate(TAU / 2, 0.30);
+        translate(12, deg_to_rad(270), 0.60);
+        translate_time(1.0, deg_to_rad(270), 0.60);
+        s1.set_angle(deg_to_rad(180));
+        sleep(1.5);
+        translate(2, deg_to_rad(90), 0.60);
+        translate_time(0.5, deg_to_rad(180), 0.60);
+        s1.set_angle(deg_to_rad(20));
+        sleep(1.5);
+        s1.set_angle(deg_to_rad(90));
+        sleep(1.5);
+        translate(6, deg_to_rad(0), 0.60);
     }
 }
