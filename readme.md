@@ -1,5 +1,7 @@
 # FEH Robot :robot: :building_construction:
 
+Interaneus Tepetis
+
 ## Usage
 
 Clone the repository including submodules:
