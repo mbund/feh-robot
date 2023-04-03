@@ -255,6 +255,9 @@ AnalogInputPin cds(FEHIO::P3_7);
 /// Global servo which controls the arm
 Servo s1(FEHServo::Servo0, 500, 2500);
 
+/// Global luggage servo
+Servo s2(FEHServo::Servo7, 500, 2500);
+
 /// Global UI state type to determine what to draw to the screen
 enum UI_MENU {
     UI_MENU_DEBUG,
@@ -322,6 +325,10 @@ bool idle() {
         if (ui_select == UI_MENU_LOGS)
             rerender_logs = true;
 
+        if (ui_select == UI_MENU_BLANK) {
+            LCD.DrawCircle(LCD_WIDTH / 2, LCD_HEIGHT / 2, 20);
+        }
+
         last_touch_switch_time = TimeNow();
 
         LCD.Clear();
@@ -381,9 +388,13 @@ bool idle() {
         LCD.WriteAt(
             correct_lever_stream.str().c_str(), 0, FONT_HEIGHT * 5);
 
+        char current_region_letter = RPS.CurrentRegionLetter();
+        if (current_region_letter < 'A' ||
+            current_region_letter > 'L')
+            current_region_letter = '?';
         std::stringstream current_region_stream;
         current_region_stream << "Region (A,B,C,D): "
-                              << RPS.CurrentRegionLetter();
+                              << current_region_letter;
         LCD.WriteAt(
             current_region_stream.str().c_str(), 0, FONT_HEIGHT * 6);
 
@@ -459,7 +470,7 @@ void translate(double distance, double heading, double power) {
     while (std::abs(m1.get_distance() * m1_ratio) +
                std::abs(m2.get_distance() * m2_ratio) +
                std::abs(m3.get_distance() * m3_ratio) <
-           distance / 2.0)
+           distance)
         IDLE();
 
     m1.flush();
@@ -537,7 +548,8 @@ void rotate(double theta, double power) {
     LOG_INFO("rot " << rad_to_deg(theta) << "rad " << (power * 100.)
                     << "%");
 
-    const auto distance = ROBOT_CENTER_TO_WHEEL_DISTANCE * theta;
+    const auto distance =
+        std::abs(ROBOT_CENTER_TO_WHEEL_DISTANCE * theta);
 
     m1.flush();
     m2.flush();
@@ -709,6 +721,7 @@ void calibrate() {
 /// Main function which is the entrypoint for the entire program
 int main() {
     s1.set_angle(deg_to_rad(90));
+    s2.set_angle(deg_to_rad(90));
     SD.Initialize();
 
     LCD.Clear(BLACK);
@@ -720,24 +733,41 @@ int main() {
         LOG_INFO("starting");
         touch_wait();
 
+        // s2.set_angle(deg_to_rad(0));
+        // sleep(1.0);
+        // touch_wait();
+        // s2.set_angle(deg_to_rad(90));
+        // sleep(1.0);
+
+        // -----
+
         cds_wait();
 
         translate(6, deg_to_rad(90), 0.60);
-        translate(3, deg_to_rad(0), 0.60);
+        translate(1, deg_to_rad(0), 0.60);
         translate(22, deg_to_rad(90), 1.00);
-        translate(6, deg_to_rad(90), 0.60);
-        translate(16, deg_to_rad(180), 0.60);
-        rotate(TAU / 2, 0.30);
-        translate(12, deg_to_rad(270), 0.60);
-        translate_time(1.0, deg_to_rad(270), 0.60);
-        s1.set_angle(deg_to_rad(180));
-        sleep(1.5);
+        translate(3, deg_to_rad(90), 0.60);
+        translate(15, deg_to_rad(180), 0.60);
+        translate_time(1.5, deg_to_rad(270), 0.30);
+        translate(0.5, deg_to_rad(90), 0.60);
+        rotate(deg_to_rad(60), 0.3);
+        translate_time(0.5, deg_to_rad(-60), 0.30);
+
+        s2.set_angle(deg_to_rad(0));
+        sleep(1.0);
+        s2.set_angle(deg_to_rad(90));
+
+        translate(2, deg_to_rad(120), 0.60);
+        rotate(deg_to_rad(60), -0.3);
+        translate_time(1.5, deg_to_rad(270), 0.70);
         translate(2, deg_to_rad(90), 0.60);
-        translate_time(0.5, deg_to_rad(180), 0.60);
-        s1.set_angle(deg_to_rad(20));
-        sleep(1.5);
-        s1.set_angle(deg_to_rad(90));
-        sleep(1.5);
-        translate(6, deg_to_rad(0), 0.60);
+        translate(15, deg_to_rad(0), 0.60);
+        translate(22, deg_to_rad(270), 0.60);
+        rotate(deg_to_rad(30), -0.3);
+        translate_time(10, deg_to_rad(270), 0.60);
+
+        // -----
+
+        // translate(22, deg_to_rad(0), 0.60);
     }
 }
