@@ -30,11 +30,8 @@
 /// of the wheels, in inches
 const auto ROBOT_CENTER_TO_WHEEL_DISTANCE = 4;
 
-/// The mathematical constant pi
-constexpr auto PI = 3.141592653589;
-
 /// The mathematical constant tau
-constexpr auto TAU = PI * 2;
+constexpr auto TAU = 6.28318530717959;
 
 /// The number of encoder counts per revolution of an IGWAN motor
 constexpr auto IGWAN_COUNTS_PER_REVOLUTION = 318;
@@ -80,10 +77,29 @@ T clamp(const T& n, const T& lower, const T& upper) {
     return std::max(lower, std::min(n, upper));
 }
 
+enum LOG_LEVEL {
+    LOG_LEVEL_NONE,
+    LOG_LEVEL_DEBUG,
+    LOG_LEVEL_INFO,
+    LOG_LEVEL_ERROR,
+    LOG_LEVEL_MAX,
+};
+
+enum LOG_LEVEL global_log_level = LOG_LEVEL_INFO;
+
+#define LOG_SCOPE(level)                                    \
+    for (enum LOG_LEVEL                                     \
+             _prev_log_level_##__LINE__ = global_log_level, \
+             global_log_level = level;                      \
+         false;                                             \
+         global_log_level = _prev_log_level_##__LINE__)
+
 /// Log information to the screen and to a file with a built in string
 /// stream
-#define LOG_INFO(message)                                       \
+#define LOG_MESSAGE(level, message)                             \
     do {                                                        \
+        if (level < global_log_level)                           \
+            break;                                              \
         std::stringstream ss;                                   \
         ss.precision(4);                                        \
         ss << message;                                          \
@@ -91,7 +107,12 @@ T clamp(const T& n, const T& lower, const T& upper) {
             ss.str(), __FILE__, __PRETTY_FUNCTION__, __LINE__); \
     } while (0)
 
-#define LOG_ERROR(message) LOG_INFO("ERROR: " << message)
+#define LOG_DEBUG(message) \
+    LOG_MESSAGE(LOG_LEVEL_DEBUG, "DBG: " << message)
+#define LOG_INFO(message) \
+    LOG_MESSAGE(LOG_LEVEL_INFO, "INF: " << message)
+#define LOG_ERROR(message) \
+    LOG_MESSAGE(LOG_LEVEL_ERROR, "ERR: " << message)
 
 /// Log information to the screen and to a file
 class Log {
@@ -195,6 +216,12 @@ Motor::Motor(FEHMotor::FEHMotorPort port, FEHIO::FEHIOPin encoder_pin)
 }
 
 void Motor::drive(double power) {
+    if (power * correction_factor < -1.0) {
+        LOG_ERROR("power oob: " << power);
+    } else if (power * correction_factor > 1.0) {
+        LOG_ERROR("power oob: " << power);
+    }
+
     this->power = clamp(power * correction_factor, -1.0, 1.0);
     motor.SetPercent(this->power * 100.0);
 }
@@ -452,13 +479,13 @@ bool idle() {
 /// @param heading The heading to translate in radians
 /// @param power The power to translate at
 void translate(double distance, double heading, double power) {
-    if (power < 0.0 || power > 1.0) {
-        LOG_ERROR("power must be between 0 and 1");
-        return;
-    }
+    // if (power < 0.0 || power > 1.0) {
+    //     LOG_ERROR("power must be between 0 and 1");
+    //     return;
+    // }
 
-    LOG_INFO("mov " << distance << "in " << heading << "rad "
-                    << (power * 100.) << "%");
+    LOG_DEBUG("mov " << distance << "in " << heading << "rad "
+                     << (power * 100.) << "%");
 
     auto x = std::cos(heading);
     auto y = std::sin(heading);
@@ -466,13 +493,13 @@ void translate(double distance, double heading, double power) {
     auto m2_ratio = -(1.0 / 3.0) * x - (1.0 / std::sqrt(3.0)) * y;
     auto m3_ratio = -(1.0 / 3.0) * x + (1.0 / std::sqrt(3.0)) * y;
 
-    auto max_ratio =
-        std::max(std::abs(m1_ratio),
-                 std::max(std::abs(m2_ratio), std::abs(m3_ratio)));
+    // auto max_ratio =
+    //     std::max(std::abs(m1_ratio),
+    //              std::max(std::abs(m2_ratio), std::abs(m3_ratio)));
 
-    m1_ratio /= max_ratio;
-    m2_ratio /= max_ratio;
-    m3_ratio /= max_ratio;
+    // m1_ratio /= max_ratio;
+    // m2_ratio /= max_ratio;
+    // m3_ratio /= max_ratio;
 
     m1.flush();
     m2.flush();
@@ -498,8 +525,8 @@ void translate(double distance, double heading, double power) {
 /// @param heading The heading to translate in.
 /// @param power The power to translate at.
 void translate_time(double duration, double heading, double power) {
-    LOG_INFO("mov " << duration << "s " << heading << "rad "
-                    << (power * 100.) << "%");
+    LOG_DEBUG("mov " << duration << "s " << heading << "rad "
+                     << (power * 100.) << "%");
 
     auto x = std::cos(heading);
     auto y = std::sin(heading);
@@ -507,13 +534,13 @@ void translate_time(double duration, double heading, double power) {
     auto m2_ratio = -(1.0 / 3.0) * x - (1.0 / std::sqrt(3.0)) * y;
     auto m3_ratio = -(1.0 / 3.0) * x + (1.0 / std::sqrt(3.0)) * y;
 
-    auto max_ratio =
-        std::max(std::abs(m1_ratio),
-                 std::max(std::abs(m2_ratio), std::abs(m3_ratio)));
+    // auto max_ratio =
+    //     std::max(std::abs(m1_ratio),
+    //              std::max(std::abs(m2_ratio), std::abs(m3_ratio)));
 
-    m1_ratio /= max_ratio;
-    m2_ratio /= max_ratio;
-    m3_ratio /= max_ratio;
+    // m1_ratio /= max_ratio;
+    // m2_ratio /= max_ratio;
+    // m3_ratio /= max_ratio;
 
     m1.flush();
     m2.flush();
@@ -561,6 +588,9 @@ void touch_wait() {
         IDLE();
     }
 
+    set_font_color(GREEN);
+    LCD.DrawCircle(LCD_WIDTH / 2.0, LCD_HEIGHT / 2.0, 5);
+
     LOG_INFO("got touch");
 }
 
@@ -568,8 +598,8 @@ void touch_wait() {
 /// @param theta Angle in radians
 /// @param power Power in the range [0, 1]
 void rotate(double theta, double power) {
-    LOG_INFO("rot " << rad_to_deg(theta) << "rad " << (power * 100.)
-                    << "%");
+    LOG_DEBUG("rot " << rad_to_deg(theta) << "rad " << (power * 100.)
+                     << "%");
 
     const auto distance =
         std::abs(ROBOT_CENTER_TO_WHEEL_DISTANCE * theta);
@@ -594,7 +624,7 @@ void rotate(double theta, double power) {
 /// Sleep for a duration
 /// @param duration Duration in seconds
 void sleep(double duration) {
-    LOG_INFO("sleep " << duration << "s");
+    LOG_DEBUG("sleep " << duration << "s");
 
     double t_start = TimeNow();
     while (TimeNow() < t_start + duration)
@@ -647,41 +677,47 @@ void fuel_lever() {
 
         if (lever == LEVER_A) {
             rotate(deg_to_rad(190), 0.30);
-            s1.set_angle(180);
+            s1.set_angle(deg_to_rad(180));
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
             sleep(6);
-            s1.set_angle(90);
+            s1.set_angle(deg_to_rad(90));
+            sleep(0.5);
             translate(3, deg_to_rad(270), 0.60);
+
+            // go to the same ending position as the other levers
+            translate(3, deg_to_rad(0), 0.60);
 
             break;
         }
 
         if (lever == LEVER_A1) {
-            translate(3.5, deg_to_rad(180), 0.60);
+            translate(4, deg_to_rad(180), 0.60);
             rotate(deg_to_rad(190), 0.30);
-            s1.set_angle(180);
+            s1.set_angle(deg_to_rad(180));
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
-            sleep(6);
-            s1.set_angle(90);
+            sleep(1);  // CHANGE ME
+            s1.set_angle(deg_to_rad(90));
+            sleep(0.5);
             translate(3, deg_to_rad(270), 0.60);
 
             break;
         }
 
         if (lever == LEVER_B) {
-            translate(3.5, deg_to_rad(180), 0.60);
+            translate(4, deg_to_rad(180), 0.60);
             rotate(deg_to_rad(225), 0.30);
-            s1.set_angle(180);
+            s1.set_angle(deg_to_rad(180));
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
             sleep(6);
-            s1.set_angle(90);
-            translate(3, deg_to_rad(270), 0.60);
+            s1.set_angle(deg_to_rad(90));
+            sleep(0.5);
+            rotate(deg_to_rad(45), -0.30);
 
             break;
         }
@@ -722,7 +758,7 @@ void calibrate() {
             break;
         }
 
-        LOG_INFO("calibrating");
+        LOG_DEBUG("calibrating");
 
         const auto max_distance = std::max(d1, std::max(d2, d3));
 
@@ -754,10 +790,18 @@ int main() {
 
         // --------- fuel lever ---------
         // navigate from starting point to fuel lever
-        translate(11, deg_to_rad(90), 0.60);
-        translate(19, deg_to_rad(180), 0.60);
+        translate(9, deg_to_rad(90), 0.60);
+        translate(18, deg_to_rad(180), 0.60);
 
         fuel_lever();
+        translate(1, deg_to_rad(180), 0.60);
+
+        rotate(deg_to_rad(180), 0.30);
+        translate(22, deg_to_rad(90), 1.10);
+        rotate(deg_to_rad(90), 0.30);
+        translate_time(1.5, deg_to_rad(270), 0.7);
+        translate(10, deg_to_rad(90), 1.00);
+        rotate(deg_to_rad(90), -0.30);
 
         // --------- luggage ---------
         // navigate from fuel lever to luggage
@@ -766,7 +810,7 @@ int main() {
         translate_time(1.5, deg_to_rad(270), 0.70);
 
         // rotate to face luggage
-        translate(0.5, deg_to_rad(90), 0.60);
+        translate(1, deg_to_rad(90), 0.60);
         rotate(deg_to_rad(60), 0.3);
         translate_time(0.5, deg_to_rad(-60), 0.30);
 
@@ -778,11 +822,16 @@ int main() {
         // square up against luggage wall again
         translate(2, deg_to_rad(120), 0.60);
         rotate(deg_to_rad(60), -0.3);
-        translate_time(1.5, deg_to_rad(270), 0.70);
-        translate(2, deg_to_rad(90), 0.60);
+        translate_time(1.0, deg_to_rad(270), 0.70);
 
-        // --------- ticket kiosk ---------
         // go and square up against the top-left angled wall
+        translate(18, deg_to_rad(90), 0.60);
+        rotate(deg_to_rad(150), 0.30);
+        translate(6, deg_to_rad(180), 0.60);
+        translate_time(1.5, deg_to_rad(180), 0.70);
+
+        /*
+        // --------- ticket kiosk ---------
         translate(18, deg_to_rad(90), 0.60);
         rotate(deg_to_rad(60), 0.3);
         translate_time(4, deg_to_rad(270), 0.60);
@@ -818,5 +867,6 @@ int main() {
         translate(6, deg_to_rad(180), 0.60);
         translate(20, deg_to_rad(90), 0.60);
         translate_time(10, deg_to_rad(90), 0.60);
+        */
     }
 }
