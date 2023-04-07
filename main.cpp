@@ -633,28 +633,28 @@ void sleep(double duration) {
 
 /// Ticket kiosk task
 void ticket_kiosk() {
-    constexpr auto RED_VALUE = 0.5;
+    constexpr auto RED_VALUE = 0.4;
     constexpr auto BLUE_VALUE = 1.2;
 
     while (true) {
         const auto val = cds.Value();
 
         if (val < RED_VALUE) {
-            LOG_INFO("detected red " << val);
+            LOG_INFO("red " << val);
 
-            translate(11, deg_to_rad(0), 0.60);
+            translate(11, deg_to_rad(180), 0.60);
 
-            translate_time(1.5, deg_to_rad(270), -0.30);
-            translate(2, deg_to_rad(270), 0.30);
+            translate_time(1.5, deg_to_rad(270), 0.30);
+            translate(2, deg_to_rad(90), 0.30);
 
             break;
         } else if (val > RED_VALUE && val < BLUE_VALUE) {
-            LOG_INFO("detected blue " << val);
+            LOG_INFO("blue " << val);
 
-            translate(5, deg_to_rad(0), 0.60);
+            translate(5, deg_to_rad(180), 0.60);
 
-            translate_time(1.5, deg_to_rad(270), -0.30);
-            translate(2, deg_to_rad(270), 0.30);
+            translate_time(1.5, deg_to_rad(270), 0.30);
+            translate(2, deg_to_rad(90), 0.30);
 
             translate(5, deg_to_rad(180), 0.60);
 
@@ -709,7 +709,7 @@ void fuel_lever() {
 
         if (lever == LEVER_B) {
             translate(4, deg_to_rad(180), 0.60);
-            rotate(deg_to_rad(225), 0.30);
+            rotate(deg_to_rad(215), 0.30);
             s1.set_angle(deg_to_rad(180));
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
@@ -790,8 +790,8 @@ int main() {
 
         // --------- fuel lever ---------
         // navigate from starting point to fuel lever
-        translate(9, deg_to_rad(90), 0.60);
-        translate(18, deg_to_rad(180), 0.60);
+        translate(8.5, deg_to_rad(90), 0.60);
+        translate(18, deg_to_rad(176), 0.60);
 
         fuel_lever();
         translate(1, deg_to_rad(180), 0.60);
@@ -800,7 +800,7 @@ int main() {
         translate(22, deg_to_rad(90), 1.10);
         rotate(deg_to_rad(90), 0.30);
         translate_time(1.5, deg_to_rad(270), 0.7);
-        translate(10, deg_to_rad(90), 1.00);
+        translate(10, deg_to_rad(90), 0.70);
         rotate(deg_to_rad(90), -0.30);
 
         // --------- luggage ---------
@@ -811,7 +811,7 @@ int main() {
 
         // rotate to face luggage
         translate(1, deg_to_rad(90), 0.60);
-        rotate(deg_to_rad(60), 0.3);
+        rotate(deg_to_rad(50), 0.3);
         translate_time(0.5, deg_to_rad(-60), 0.30);
 
         // drop luggage
@@ -825,22 +825,28 @@ int main() {
         translate_time(1.0, deg_to_rad(270), 0.70);
 
         // go and square up against the top-left angled wall
-        translate(18, deg_to_rad(90), 0.60);
-        rotate(deg_to_rad(150), 0.30);
-        translate(6, deg_to_rad(180), 0.60);
-        translate_time(1.5, deg_to_rad(180), 0.70);
+        translate(16.8, deg_to_rad(90), 0.60);
+        rotate(deg_to_rad(130), 0.30);
+        translate(4, deg_to_rad(270), 0.60);
+        translate_time(1.5, deg_to_rad(270), 0.70);
+        translate(3.5, deg_to_rad(90), 0.60);
+        rotate(deg_to_rad(45), 0.30);
 
-        /*
         // --------- ticket kiosk ---------
-        translate(18, deg_to_rad(90), 0.60);
-        rotate(deg_to_rad(60), 0.3);
-        translate_time(4, deg_to_rad(270), 0.60);
+        // translate(18, deg_to_rad(90), 0.60);
+        // rotate(deg_to_rad(60), 0.3);
+        // translate_time(4, deg_to_rad(270), 0.60);
 
-        // move on top of the light
-        translate(8, deg_to_rad(90), 0.60);
-        rotate(deg_to_rad(60), -0.60);
+        // // move on top of the light
+        // translate(8, deg_to_rad(90), 0.60);
+        // rotate(deg_to_rad(60), -0.60);
+
+        // bring arm down below the handle in preperation for the
+        // passport stamp
+        s1.set_angle(deg_to_rad(180));
 
         ticket_kiosk();
+        /*
 
         // --------- passport stamp ---------
         // square up against button wall
