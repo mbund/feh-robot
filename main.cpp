@@ -726,12 +726,8 @@ void fuel_lever() {
             sleep(6);  // 5 second wait for bonus
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
-            rotate(deg_to_rad(30), -0.30);
-            translate(3, deg_to_rad(270), 0.60);
-
-            // go to the same ending position as the other levers
-            rotate(deg_to_rad(180), -0.30);
-            translate(1, deg_to_rad(0), 0.60);
+            translate(2, deg_to_rad(270), 0.60);
+            rotate(deg_to_rad(220), -0.30);
 
             break;
         }
@@ -877,8 +873,8 @@ int main() {
         translate(10, deg_to_rad(180), 0.60);
         translate(20, deg_to_rad(90), 0.60);
 
-        // now down the ramp
-        // rotate(deg_to_rad(30), -0.3);
+        // now the robot is down the ramp
+        rotate(deg_to_rad(30), -0.3);
         translate_time(10, deg_to_rad(90), 0.60);
     }
 }
