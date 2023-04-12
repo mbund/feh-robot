@@ -644,8 +644,8 @@ void ticket_kiosk() {
 
             translate(11, deg_to_rad(180), 0.60);
 
-            translate_time(1.5, deg_to_rad(270), 0.30);
-            translate(1.7, deg_to_rad(90), 0.30);
+            translate_time(1.0, deg_to_rad(270), 0.70);
+            translate(1.4, deg_to_rad(90), 0.30);
 
             break;
         } else if (val > RED_VALUE && val < BLUE_VALUE) {
@@ -653,8 +653,8 @@ void ticket_kiosk() {
 
             translate(5, deg_to_rad(180), 0.60);
 
-            translate_time(1.5, deg_to_rad(270), 0.30);
-            translate(1.7, deg_to_rad(90), 0.30);
+            translate_time(1.0, deg_to_rad(270), 0.70);
+            translate(1.4, deg_to_rad(90), 0.30);
 
             translate(5, deg_to_rad(180), 0.60);
 
@@ -677,20 +677,21 @@ void fuel_lever() {
         LOG_INFO("got rps lever " << lever);
 
         if (lever == LEVER_A) {
+            translate(0.5, deg_to_rad(180), 0.60);
             rotate(deg_to_rad(180), 0.30);
             translate(1, deg_to_rad(90), 0.60);
             s1.set_angle(deg_to_rad(180));
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
-            sleep(5);  // CHANGE ME 5 SECOND WAIT
+            sleep(6);  // 5 second wait for bonus
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
             translate(3, deg_to_rad(270), 0.60);
 
             // go to the same ending position as the other levers
             rotate(deg_to_rad(180), -0.30);
-            translate(2, deg_to_rad(180), 0.60);
+            translate(3, deg_to_rad(180), 0.60);
 
             break;
         }
@@ -698,19 +699,19 @@ void fuel_lever() {
         if (lever == LEVER_A1) {
             translate(3.8, deg_to_rad(180), 0.60);
             rotate(deg_to_rad(190), 0.30);
-            translate(1, deg_to_rad(90), 0.60);
+            // translate(1, deg_to_rad(90), 0.60);
             s1.set_angle(deg_to_rad(180));
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
-            sleep(5);  // CHANGE ME 5 SECOND WAIT
+            sleep(6);  // 5 second wait for bonus
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
             translate(3, deg_to_rad(270), 0.60);
 
             // go to the same ending position as the other levers
             rotate(deg_to_rad(180), -0.30);
-            translate(0.8, deg_to_rad(0), 0.60);
+            // translate(0.8, deg_to_rad(0), 0.60);
 
             break;
         }
@@ -722,7 +723,7 @@ void fuel_lever() {
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
-            sleep(5);  // CHANGE ME 5 SECOND WAIT
+            sleep(6);  // 5 second wait for bonus
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
             rotate(deg_to_rad(30), -0.30);
@@ -730,7 +731,7 @@ void fuel_lever() {
 
             // go to the same ending position as the other levers
             rotate(deg_to_rad(180), -0.30);
-            translate(0.8, deg_to_rad(0), 0.60);
+            translate(1, deg_to_rad(0), 0.60);
 
             break;
         }
@@ -803,14 +804,12 @@ int main() {
 
         // --------- fuel lever ---------
         // navigate from starting point to fuel lever
-        translate(9, deg_to_rad(90), 0.60);
+        translate(8.75, deg_to_rad(90), 0.60);
         translate(18, deg_to_rad(180), 0.60);
 
         fuel_lever();
 
-        // translate(1.5, deg_to_rad(180), 0.60);
-
-        // rotate(deg_to_rad(180), 0.30);
+        // go up the ramp and square up against the left wall
         translate(22, deg_to_rad(90), 1.10);
         rotate(deg_to_rad(90), 0.30);
         translate_time(2, deg_to_rad(270), 0.70);
@@ -858,23 +857,28 @@ int main() {
         // bring the axis of the motor in line with the axis of the
         // handle
         translate_time(0.5, deg_to_rad(180), 0.60);
-        rotate(deg_to_rad(10), -0.30);
+        rotate(deg_to_rad(15), -0.30);
         translate(0.5, deg_to_rad(0), 0.30);
 
         // bring the arm (and lever) up
         s1.set_angle(deg_to_rad(20));
-        sleep(1.5);
+        sleep(1);
+        translate(2, deg_to_rad(90), 0.30);
+        sleep(0.5);
         s1.set_angle(deg_to_rad(90));
+        sleep(1);
 
         // --------- final button ---------
         // move away from passport stamp
-        translate(4, deg_to_rad(0), 0.60);
+        translate(2, deg_to_rad(0), 0.60);
 
         // navigate down the ramp and hit the button
         translate(12, deg_to_rad(90), 0.60);
-        translate(12, deg_to_rad(180), 0.60);
+        translate(10, deg_to_rad(180), 0.60);
         translate(20, deg_to_rad(90), 0.60);
-        rotate(deg_to_rad(30), -0.3);
+
+        // now down the ramp
+        // rotate(deg_to_rad(30), -0.3);
         translate_time(10, deg_to_rad(90), 0.60);
     }
 }
