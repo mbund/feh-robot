@@ -645,7 +645,7 @@ void ticket_kiosk() {
             translate(11, deg_to_rad(180), 0.60);
 
             translate_time(1.5, deg_to_rad(270), 0.30);
-            translate(2, deg_to_rad(90), 0.30);
+            translate(1.7, deg_to_rad(90), 0.30);
 
             break;
         } else if (val > RED_VALUE && val < BLUE_VALUE) {
@@ -654,7 +654,7 @@ void ticket_kiosk() {
             translate(5, deg_to_rad(180), 0.60);
 
             translate_time(1.5, deg_to_rad(270), 0.30);
-            translate(2, deg_to_rad(90), 0.30);
+            translate(1.7, deg_to_rad(90), 0.30);
 
             translate(5, deg_to_rad(180), 0.60);
 
@@ -673,54 +673,65 @@ void fuel_lever() {
 
     while (true) {
         const auto lever = RPS.GetCorrectLever();
+        // const auto lever = LEVER_B;
         LOG_INFO("got rps lever " << lever);
 
         if (lever == LEVER_A) {
-            rotate(deg_to_rad(178), 0.30);
+            rotate(deg_to_rad(180), 0.30);
             translate(1, deg_to_rad(90), 0.60);
             s1.set_angle(deg_to_rad(180));
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
-            sleep(10);  // CHANGE ME 5 SECOND WAIT
+            sleep(5);  // CHANGE ME 5 SECOND WAIT
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
             translate(3, deg_to_rad(270), 0.60);
 
             // go to the same ending position as the other levers
-            translate(2.7, deg_to_rad(0), 0.60);
+            rotate(deg_to_rad(180), -0.30);
+            translate(2, deg_to_rad(180), 0.60);
 
             break;
         }
 
         if (lever == LEVER_A1) {
-            translate(4, deg_to_rad(180), 0.60);
+            translate(3.8, deg_to_rad(180), 0.60);
             rotate(deg_to_rad(190), 0.30);
             translate(1, deg_to_rad(90), 0.60);
             s1.set_angle(deg_to_rad(180));
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
-            sleep(10);  // CHANGE ME 5 SECOND WAIT
+            sleep(5);  // CHANGE ME 5 SECOND WAIT
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
             translate(3, deg_to_rad(270), 0.60);
+
+            // go to the same ending position as the other levers
+            rotate(deg_to_rad(180), -0.30);
+            translate(0.8, deg_to_rad(0), 0.60);
 
             break;
         }
 
         if (lever == LEVER_B) {
-            translate(4, deg_to_rad(180), 0.60);
+            translate(3.8, deg_to_rad(180), 0.60);
             rotate(deg_to_rad(220), 0.30);
             s1.set_angle(deg_to_rad(180));
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
-            sleep(10);  // CHANGE ME 5 SECOND WAIT
+            sleep(5);  // CHANGE ME 5 SECOND WAIT
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
-            rotate(deg_to_rad(25), -0.30);
+            rotate(deg_to_rad(30), -0.30);
             translate(3, deg_to_rad(270), 0.60);
+
+            // go to the same ending position as the other levers
+            rotate(deg_to_rad(180), -0.30);
+            translate(0.8, deg_to_rad(0), 0.60);
+
             break;
         }
 
@@ -792,17 +803,17 @@ int main() {
 
         // --------- fuel lever ---------
         // navigate from starting point to fuel lever
-        translate(8, deg_to_rad(90), 0.60);
-        translate(18, deg_to_rad(176), 0.60);
+        translate(9, deg_to_rad(90), 0.60);
+        translate(18, deg_to_rad(180), 0.60);
 
         fuel_lever();
 
-        translate(1.5, deg_to_rad(180), 0.60);
+        // translate(1.5, deg_to_rad(180), 0.60);
 
-        rotate(deg_to_rad(180), 0.30);
+        // rotate(deg_to_rad(180), 0.30);
         translate(22, deg_to_rad(90), 1.10);
         rotate(deg_to_rad(90), 0.30);
-        translate_time(1.5, deg_to_rad(270), 0.7);
+        translate_time(2, deg_to_rad(270), 0.70);
         translate(10, deg_to_rad(90), 0.70);
         rotate(deg_to_rad(90), -0.30);
 
@@ -810,7 +821,7 @@ int main() {
         // navigate from fuel lever to luggage
 
         // square up against luggage wall
-        translate_time(1.5, deg_to_rad(270), 0.70);
+        translate_time(2, deg_to_rad(270), 0.70);
 
         // rotate to face luggage
         translate(1, deg_to_rad(90), 0.60);
@@ -825,10 +836,10 @@ int main() {
         // square up against luggage wall again
         translate(2, deg_to_rad(120), 0.60);
         rotate(deg_to_rad(60), -0.3);
-        translate_time(1.0, deg_to_rad(270), 0.70);
+        translate_time(1.5, deg_to_rad(270), 0.70);
 
         // go and square up against the top-left angled wall
-        translate(16.8, deg_to_rad(90), 0.60);
+        translate(16.5, deg_to_rad(90), 0.60);
         rotate(deg_to_rad(130), 0.30);
         translate(4, deg_to_rad(270), 0.60);
         translate_time(1.5, deg_to_rad(270), 0.70);
@@ -847,6 +858,7 @@ int main() {
         // bring the axis of the motor in line with the axis of the
         // handle
         translate_time(0.5, deg_to_rad(180), 0.60);
+        rotate(deg_to_rad(10), -0.30);
         translate(0.5, deg_to_rad(0), 0.30);
 
         // bring the arm (and lever) up
@@ -860,8 +872,9 @@ int main() {
 
         // navigate down the ramp and hit the button
         translate(12, deg_to_rad(90), 0.60);
-        translate(8, deg_to_rad(180), 0.60);
+        translate(12, deg_to_rad(180), 0.60);
         translate(20, deg_to_rad(90), 0.60);
+        rotate(deg_to_rad(30), -0.3);
         translate_time(10, deg_to_rad(90), 0.60);
     }
 }
