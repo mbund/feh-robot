@@ -290,8 +290,8 @@ Servo s2(FEHServo::Servo7, 500, 2500);
 /// Global UI state type to determine what to draw to the screen
 enum UI_MENU {
     UI_MENU_DEBUG,
-    UI_MENU_LOGS,
     UI_MENU_BLANK,
+    UI_MENU_LOGS,
     UI_MENU_MAX,
 };
 
@@ -676,18 +676,19 @@ void fuel_lever() {
         LOG_INFO("got rps lever " << lever);
 
         if (lever == LEVER_A) {
-            rotate(deg_to_rad(190), 0.30);
+            rotate(deg_to_rad(178), 0.30);
+            translate(1, deg_to_rad(90), 0.60);
             s1.set_angle(deg_to_rad(180));
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
-            sleep(6);
+            sleep(10);  // CHANGE ME 5 SECOND WAIT
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
             translate(3, deg_to_rad(270), 0.60);
 
             // go to the same ending position as the other levers
-            translate(3, deg_to_rad(0), 0.60);
+            translate(2.7, deg_to_rad(0), 0.60);
 
             break;
         }
@@ -695,11 +696,12 @@ void fuel_lever() {
         if (lever == LEVER_A1) {
             translate(4, deg_to_rad(180), 0.60);
             rotate(deg_to_rad(190), 0.30);
+            translate(1, deg_to_rad(90), 0.60);
             s1.set_angle(deg_to_rad(180));
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
-            sleep(1);  // CHANGE ME
+            sleep(10);  // CHANGE ME 5 SECOND WAIT
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
             translate(3, deg_to_rad(270), 0.60);
@@ -709,16 +711,16 @@ void fuel_lever() {
 
         if (lever == LEVER_B) {
             translate(4, deg_to_rad(180), 0.60);
-            rotate(deg_to_rad(215), 0.30);
+            rotate(deg_to_rad(220), 0.30);
             s1.set_angle(deg_to_rad(180));
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
-            sleep(6);
+            sleep(10);  // CHANGE ME 5 SECOND WAIT
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
-            rotate(deg_to_rad(45), -0.30);
-
+            rotate(deg_to_rad(25), -0.30);
+            translate(3, deg_to_rad(270), 0.60);
             break;
         }
 
@@ -790,11 +792,12 @@ int main() {
 
         // --------- fuel lever ---------
         // navigate from starting point to fuel lever
-        translate(8.5, deg_to_rad(90), 0.60);
+        translate(8, deg_to_rad(90), 0.60);
         translate(18, deg_to_rad(176), 0.60);
 
         fuel_lever();
-        translate(1, deg_to_rad(180), 0.60);
+
+        translate(1.5, deg_to_rad(180), 0.60);
 
         rotate(deg_to_rad(180), 0.30);
         translate(22, deg_to_rad(90), 1.10);
@@ -833,31 +836,18 @@ int main() {
         rotate(deg_to_rad(45), 0.30);
 
         // --------- ticket kiosk ---------
-        // translate(18, deg_to_rad(90), 0.60);
-        // rotate(deg_to_rad(60), 0.3);
-        // translate_time(4, deg_to_rad(270), 0.60);
-
-        // // move on top of the light
-        // translate(8, deg_to_rad(90), 0.60);
-        // rotate(deg_to_rad(60), -0.60);
-
         // bring arm down below the handle in preperation for the
         // passport stamp
         s1.set_angle(deg_to_rad(180));
 
         ticket_kiosk();
-        /*
 
         // --------- passport stamp ---------
-        // square up against button wall
-
-        // bring arm down below the handle
-        s1.set_angle(deg_to_rad(180));
-        sleep(1.5);
 
         // bring the axis of the motor in line with the axis of the
         // handle
         translate_time(0.5, deg_to_rad(180), 0.60);
+        translate(0.5, deg_to_rad(0), 0.30);
 
         // bring the arm (and lever) up
         s1.set_angle(deg_to_rad(20));
@@ -870,9 +860,8 @@ int main() {
 
         // navigate down the ramp and hit the button
         translate(12, deg_to_rad(90), 0.60);
-        translate(6, deg_to_rad(180), 0.60);
+        translate(8, deg_to_rad(180), 0.60);
         translate(20, deg_to_rad(90), 0.60);
         translate_time(10, deg_to_rad(90), 0.60);
-        */
     }
 }
