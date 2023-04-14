@@ -28,7 +28,7 @@
 
 /// The distance between the center of the robot and the center of one
 /// of the wheels, in inches
-const auto ROBOT_CENTER_TO_WHEEL_DISTANCE = 4;
+constexpr auto ROBOT_CENTER_TO_WHEEL_DISTANCE = 4;
 
 /// The mathematical constant tau
 constexpr auto TAU = 6.28318530717959;
@@ -47,16 +47,16 @@ constexpr auto IGWAN_COUNTS_PER_INCH =
     IGWAN_COUNTS_PER_REVOLUTION / WHEEL_CIRCUMFERENCE;
 
 /// The supposed width of the LCD screen, in pixels
-const auto TRUE_LCD_WIDTH = 320;
+constexpr auto TRUE_LCD_WIDTH = 320;
 
 /// The supposed height of the LCD screen, in pixels
-const auto TRUE_LCD_HEIGHT = 240;
+constexpr auto TRUE_LCD_HEIGHT = 240;
 
 /// The actual width of the LCD screen, in pixels
-const auto LCD_WIDTH = TRUE_LCD_WIDTH - 1;
+constexpr auto LCD_WIDTH = TRUE_LCD_WIDTH - 1;
 
 /// The actual height of the LCD screen, in pixels
-const auto LCD_HEIGHT = TRUE_LCD_HEIGHT - 2;
+constexpr auto LCD_HEIGHT = TRUE_LCD_HEIGHT - 2;
 
 /// Converts degrees to radians
 /// @param deg The degrees to convert
@@ -493,14 +493,6 @@ void translate(double distance, double heading, double power) {
     auto m2_ratio = -(1.0 / 3.0) * x - (1.0 / std::sqrt(3.0)) * y;
     auto m3_ratio = -(1.0 / 3.0) * x + (1.0 / std::sqrt(3.0)) * y;
 
-    // auto max_ratio =
-    //     std::max(std::abs(m1_ratio),
-    //              std::max(std::abs(m2_ratio), std::abs(m3_ratio)));
-
-    // m1_ratio /= max_ratio;
-    // m2_ratio /= max_ratio;
-    // m3_ratio /= max_ratio;
-
     m1.flush();
     m2.flush();
     m3.flush();
@@ -534,14 +526,6 @@ void translate_time(double duration, double heading, double power) {
     auto m2_ratio = -(1.0 / 3.0) * x - (1.0 / std::sqrt(3.0)) * y;
     auto m3_ratio = -(1.0 / 3.0) * x + (1.0 / std::sqrt(3.0)) * y;
 
-    // auto max_ratio =
-    //     std::max(std::abs(m1_ratio),
-    //              std::max(std::abs(m2_ratio), std::abs(m3_ratio)));
-
-    // m1_ratio /= max_ratio;
-    // m2_ratio /= max_ratio;
-    // m3_ratio /= max_ratio;
-
     m1.flush();
     m2.flush();
     m3.flush();
@@ -564,11 +548,17 @@ void cds_wait() {
     LOG_INFO("waiting for cds");
 
     constexpr auto RED_VALUE = 0.3;
+    constexpr auto TIMEOUT_SEC = 30;
 
+    auto timeout = TimeNow();
     auto val = cds.Value();
     while (val >= RED_VALUE) {
         val = cds.Value();
         IDLE();
+        if (TimeNow() >= timeout + TIMEOUT_SEC) {
+            LOG_ERROR("timeout cds");
+            break;
+        }
     }
 
     LOG_INFO("cds end " << val << " < " << RED_VALUE);
@@ -635,7 +625,9 @@ void sleep(double duration) {
 void ticket_kiosk() {
     constexpr auto RED_VALUE = 0.4;
     constexpr auto BLUE_VALUE = 1.2;
+    constexpr auto TIMEOUT_SEC = 5;
 
+    auto timeout = TimeNow();
     while (true) {
         const auto val = cds.Value();
 
@@ -648,7 +640,8 @@ void ticket_kiosk() {
             translate(1.4, deg_to_rad(90), 0.30);
 
             break;
-        } else if (val > RED_VALUE && val < BLUE_VALUE) {
+        } else if ((val > RED_VALUE && val < BLUE_VALUE) ||
+                   (TimeNow() >= timeout + TIMEOUT_SEC)) {
             LOG_INFO("blue " << val);
 
             translate(5, deg_to_rad(180), 0.60);
@@ -684,7 +677,7 @@ void fuel_lever() {
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
-            sleep(6);  // 5 second wait for bonus
+            sleep(7);  // 5 second wait for bonus
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
             translate(3, deg_to_rad(270), 0.60);
@@ -704,7 +697,7 @@ void fuel_lever() {
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
-            sleep(6);  // 5 second wait for bonus
+            sleep(7);  // 5 second wait for bonus
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
             translate(3, deg_to_rad(270), 0.60);
@@ -723,7 +716,7 @@ void fuel_lever() {
             sleep(1);
             translate(3, deg_to_rad(270), 0.60);
             translate(3, deg_to_rad(90), 0.60);
-            sleep(6);  // 5 second wait for bonus
+            sleep(7);  // 5 second wait for bonus
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
             translate(2, deg_to_rad(270), 0.60);
@@ -876,5 +869,6 @@ int main() {
         // now the robot is down the ramp
         rotate(deg_to_rad(30), -0.3);
         translate_time(10, deg_to_rad(90), 0.60);
+        translate_time(10, deg_to_rad(180), 0.60);
     }
 }
