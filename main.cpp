@@ -851,10 +851,10 @@ int main() {
 
         // bring the arm (and lever) up
         s1.set_angle(deg_to_rad(20));
-        sleep(1);
-        translate(2, deg_to_rad(90), 0.30);
-        sleep(0.5);
+        sleep(1.5);
         s1.set_angle(deg_to_rad(90));
+        sleep(0.5);
+        translate(2, deg_to_rad(90), 0.70);
         sleep(1);
 
         // --------- final button ---------
@@ -867,8 +867,7 @@ int main() {
         translate(20, deg_to_rad(90), 0.60);
 
         // now the robot is down the ramp
-        rotate(deg_to_rad(30), -0.3);
-        translate_time(10, deg_to_rad(90), 0.60);
-        translate_time(10, deg_to_rad(180), 0.60);
+        translate_time(7, deg_to_rad(90), 0.60);
+        translate_time(5, deg_to_rad(180), 0.60);
     }
 }
