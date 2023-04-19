@@ -759,20 +759,20 @@ int main() {
         // rotate to face luggage
         translate(1, deg_to_rad(90), 0.60);
         rotate(deg_to_rad(50), 0.60);
-        translate_time(0.5, deg_to_rad(-60), 0.30);
+        translate_time(0.25, deg_to_rad(-60), 0.30);
 
         // drop luggage
         s2.set_angle(deg_to_rad(0));
-        sleep(0.5);
+        sleep(0.25);
         s2.set_angle(deg_to_rad(90));
 
-        // square up against luggage wall again
+        // // square up against luggage wall again
         translate(2, deg_to_rad(120), 0.60);
         rotate(deg_to_rad(60), -0.3);
-        translate_time(1.0, deg_to_rad(270), 0.70);
+        // translate_time(1.0, deg_to_rad(270), 0.70);
 
         // go and square up against the top-left angled wall
-        translate(13, deg_to_rad(90), 1.60);
+        translate(9.0, deg_to_rad(90), 1.60);
         sleep(0.1);
         rotate(deg_to_rad(130), 0.60);
         translate(5, deg_to_rad(270), 0.60);
@@ -798,7 +798,7 @@ int main() {
         // handle
         translate_time(0.5, deg_to_rad(180), 0.60);
         rotate(deg_to_rad(15), -0.60);
-        translate(0.75, deg_to_rad(0), 0.40);
+        translate(1.0, deg_to_rad(0), 0.50);
 
         // bring the arm (and lever) up
         s1.set_angle(deg_to_rad(20));
