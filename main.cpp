@@ -1,5 +1,5 @@
 /// @file main.cpp
-/// @author Mark Bundschuh
+/// @author Mark Bundschuh and Eric Zhang
 /// @brief Contains the entrypoint for the program
 
 #include <FEHBattery.h>
@@ -684,7 +684,8 @@ void fuel_lever() {
 
             // go to the same ending position as the other levers
             rotate(deg_to_rad(180), -0.30);
-            translate(3, deg_to_rad(180), 0.60);
+            translate(2.8, deg_to_rad(180), 0.60);
+            translate(1, deg_to_rad(90), 0.60);
 
             break;
         }
@@ -794,14 +795,14 @@ int main() {
         // --------- fuel lever ---------
         // navigate from starting point to fuel lever
         translate(8.75, deg_to_rad(90), 0.60);
-        translate(18, deg_to_rad(180), 0.60);
+        translate(17.9, deg_to_rad(180), 0.60);
 
         fuel_lever();
 
         // go up the ramp and square up against the left wall
         translate(22, deg_to_rad(90), 1.10);
         rotate(deg_to_rad(90), 0.30);
-        translate_time(2, deg_to_rad(270), 0.70);
+        translate_time(1, deg_to_rad(270), 0.70);
         translate(10, deg_to_rad(90), 0.70);
         rotate(deg_to_rad(90), -0.30);
 
@@ -809,7 +810,7 @@ int main() {
         // navigate from fuel lever to luggage
 
         // square up against luggage wall
-        translate_time(2, deg_to_rad(270), 0.70);
+        translate_time(0.5, deg_to_rad(270), 0.70);
 
         // rotate to face luggage
         translate(1, deg_to_rad(90), 0.60);
@@ -830,8 +831,13 @@ int main() {
         translate(16.5, deg_to_rad(90), 0.60);
         rotate(deg_to_rad(130), 0.30);
         translate(4, deg_to_rad(270), 0.60);
-        translate_time(1.5, deg_to_rad(270), 0.70);
-        translate(3.5, deg_to_rad(90), 0.60);
+        translate_time(1, deg_to_rad(270), 0.70);
+
+        // stuff robot into corner
+        translate_time(2, deg_to_rad(180), 0.3);
+        translate(2.7, deg_to_rad(0), 0.6);
+
+        translate(2.8, deg_to_rad(90), 0.60);
         rotate(deg_to_rad(45), 0.30);
 
         // --------- ticket kiosk ---------
@@ -855,7 +861,7 @@ int main() {
         s1.set_angle(deg_to_rad(90));
         sleep(0.5);
         translate(2, deg_to_rad(90), 0.70);
-        sleep(1);
+        sleep(0.5);
 
         // --------- final button ---------
         // move away from passport stamp
@@ -863,11 +869,11 @@ int main() {
 
         // navigate down the ramp and hit the button
         translate(12, deg_to_rad(90), 0.60);
-        translate(10, deg_to_rad(180), 0.60);
+        translate(11, deg_to_rad(180), 0.60);
         translate(20, deg_to_rad(90), 0.60);
 
         // now the robot is down the ramp
-        translate_time(7, deg_to_rad(90), 0.60);
+        translate_time(3, deg_to_rad(90), 0.60);
         translate_time(5, deg_to_rad(180), 0.60);
     }
 }
