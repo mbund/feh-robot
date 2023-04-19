@@ -327,11 +327,8 @@ void set_background_color(unsigned int color) {
 
 double last_touch_switch_time = 0;
 double last_write_time = 0;
-double last_calibrate_time = 0;
 size_t scroll_index = 0;
 size_t num_logs = 0;
-
-void calibrate();
 
 /// Library function to draw UI to the screen while the robot is
 /// idling
@@ -451,16 +448,6 @@ bool idle() {
             set_font_color(BLACK);
             RPS.InitializeTouchMenu();
             idle();
-        }
-
-        LCD.WriteAt("C", 5 + 100, LCD_HEIGHT - FONT_HEIGHT - 5);
-        if (TimeNow() - last_calibrate_time > 0.5 && touch_pressed &&
-            touch_x > 100 && touch_x < 50 + 100 &&
-            touch_y > LCD_HEIGHT - 50) {
-            last_calibrate_time = TimeNow();
-            set_background_color(WHITE);
-            set_font_color(BLACK);
-            calibrate();
         }
     }
 
@@ -637,7 +624,7 @@ void ticket_kiosk() {
             translate(11, deg_to_rad(180), 0.60);
 
             translate_time(0.5, deg_to_rad(270), 0.70);
-            translate(1.4, deg_to_rad(90), 0.30);
+            translate(1.5, deg_to_rad(90), 0.30);
 
             break;
         } else if ((val > RED_VALUE && val < BLUE_VALUE) ||
@@ -647,7 +634,7 @@ void ticket_kiosk() {
             translate(5, deg_to_rad(180), 0.60);
 
             translate_time(0.5, deg_to_rad(270), 0.70);
-            translate(1.4, deg_to_rad(90), 0.30);
+            translate(1.5, deg_to_rad(90), 0.30);
 
             translate(5, deg_to_rad(180), 0.60);
 
@@ -666,112 +653,68 @@ void fuel_lever() {
 
     while (true) {
         const auto lever = RPS.GetCorrectLever();
-        // const auto lever = LEVER_B;
         LOG_INFO("got rps lever " << lever);
 
         if (lever == LEVER_A) {
-            translate(0.5, deg_to_rad(180), 0.60);
-            rotate(deg_to_rad(180), 0.30);
-            translate(1, deg_to_rad(90), 0.60);
+            translate(0.5, deg_to_rad(180), 0.90);
+            rotate(deg_to_rad(170), 0.50);
+            translate(1, deg_to_rad(90), 0.90);
             s1.set_angle(deg_to_rad(180));
             sleep(0.5);
-            translate(3, deg_to_rad(270), 0.60);
-            translate(3, deg_to_rad(90), 0.60);
-            sleep(6);  // 5 second wait for bonus
+            translate(1.75, deg_to_rad(270), 0.90);
+            sleep(1);
+            translate(1.75, deg_to_rad(90), 0.90);
+            sleep(5);  // 5 second wait for bonus
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
-            translate(3, deg_to_rad(270), 0.60);
+            translate(1.75, deg_to_rad(270), 0.90);
 
             // go to the same ending position as the other levers
-            rotate(deg_to_rad(180), -0.30);
-            translate(2.8, deg_to_rad(180), 0.60);
-            translate(1, deg_to_rad(90), 0.60);
+            rotate(deg_to_rad(170), -0.50);
+            translate(2.8, deg_to_rad(180), 0.90);
+            sleep(0.1);
 
             break;
         }
 
         if (lever == LEVER_A1) {
-            translate(3.8, deg_to_rad(177), 0.60);
-            rotate(deg_to_rad(190), 0.30);
-            // translate(1, deg_to_rad(90), 0.60);
+            translate(3.4, deg_to_rad(177), 0.90);
+            rotate(deg_to_rad(190), 0.50);
+            // translate(1, deg_to_rad(90), 0.90);
             s1.set_angle(deg_to_rad(180));
             sleep(0.5);
-            translate(3, deg_to_rad(270), 0.60);
-            translate(3, deg_to_rad(90), 0.60);
-            sleep(6);  // 5 second wait for bonus
+            translate(1.75, deg_to_rad(270), 0.90);
+            sleep(1);
+            translate(1.75, deg_to_rad(90), 0.90);
+            sleep(5);  // 5 second wait for bonus
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
-            translate(3, deg_to_rad(270), 0.60);
+            translate(1.75, deg_to_rad(270), 0.90);
 
             // go to the same ending position as the other levers
-            rotate(deg_to_rad(180), -0.30);
-            // translate(0.8, deg_to_rad(0), 0.60);
+            rotate(deg_to_rad(180), -0.50);
 
             break;
         }
 
         if (lever == LEVER_B) {
-            translate(3.8, deg_to_rad(177), 0.60);
-            rotate(deg_to_rad(220), 0.30);
+            translate(3.5, deg_to_rad(177), 0.90);
+            rotate(deg_to_rad(215), 0.50);
             s1.set_angle(deg_to_rad(180));
             sleep(0.5);
-            translate(3, deg_to_rad(270), 0.60);
-            translate(3, deg_to_rad(90), 0.60);
-            sleep(6);  // 5 second wait for bonus
+            translate(1.75, deg_to_rad(270), 0.90);
+            sleep(1);
+            translate(1.75, deg_to_rad(90), 0.90);
+            sleep(5);  // 5 second wait for bonus
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
-            translate(2, deg_to_rad(270), 0.60);
-            rotate(deg_to_rad(220), -0.30);
+            translate(2, deg_to_rad(270), 0.90);
+            rotate(deg_to_rad(215), -0.50);
 
             break;
         }
 
         IDLE();
-    }
-}
-
-/// Calibrate the motors by driving them at a constant speed for a few
-/// seconds and then backing down the motor ratios until the three
-/// motors are all within a threshold of each other.
-void calibrate() {
-    constexpr auto DIST_THRESHOLD = 0.2;
-    constexpr auto CORRECTION_FACTOR_ADJUSTMENT = 0.005;
-
-    while (true) {
-        m1.flush();
-        m2.flush();
-        m3.flush();
-
-        m1.drive(0.2);
-        m2.drive(0.2);
-        m3.drive(0.2);
-
-        sleep(2);
-
-        const double d1 = m1.get_distance();
-        const double d2 = m2.get_distance();
-        const double d3 = m3.get_distance();
-
-        if (std::abs(d1 - d2) < DIST_THRESHOLD &&
-            std::abs(d1 - d3) < DIST_THRESHOLD &&
-            std::abs(d2 - d3) < DIST_THRESHOLD) {
-            LOG_INFO("calibrated");
-            m1.flush();
-            m2.flush();
-            m3.flush();
-            break;
-        }
-
-        LOG_DEBUG("calibrating");
-
-        const auto max_distance = std::max(d1, std::max(d2, d3));
-
-        if (d1 == max_distance)
-            m1.correction_factor -= CORRECTION_FACTOR_ADJUSTMENT;
-        if (d2 == max_distance)
-            m2.correction_factor -= CORRECTION_FACTOR_ADJUSTMENT;
-        if (d3 == max_distance)
-            m3.correction_factor -= CORRECTION_FACTOR_ADJUSTMENT;
     }
 }
 
@@ -794,28 +737,28 @@ int main() {
 
         // --------- fuel lever ---------
         // navigate from starting point to fuel lever
-        translate(8.50, deg_to_rad(90), 0.80);
+        translate(8.25, deg_to_rad(90), 0.80);
         sleep(0.1);
-        translate(17.9, deg_to_rad(180), 1.00);
+        translate(16.5, deg_to_rad(180), 1.00);
 
         fuel_lever();
 
         // go up the ramp and square up against the left wall
-        translate(23, deg_to_rad(90), 1.10);
-        rotate(deg_to_rad(90), 0.30);
+        translate(22, deg_to_rad(90), 1.20);
+        rotate(deg_to_rad(65), 0.60);
         translate_time(1.5, deg_to_rad(270), 0.70);
         translate(10, deg_to_rad(90), 0.70);
-        rotate(deg_to_rad(90), -0.30);
+        rotate(deg_to_rad(90), -0.60);
 
         // --------- luggage ---------
         // navigate from fuel lever to luggage
 
         // square up against luggage wall
-        translate_time(0.5, deg_to_rad(270), 0.70);
+        translate_time(0.75, deg_to_rad(270), 0.70);
 
         // rotate to face luggage
         translate(1, deg_to_rad(90), 0.60);
-        rotate(deg_to_rad(50), 0.3);
+        rotate(deg_to_rad(50), 0.60);
         translate_time(0.5, deg_to_rad(-60), 0.30);
 
         // drop luggage
@@ -829,8 +772,9 @@ int main() {
         translate_time(1.0, deg_to_rad(270), 0.70);
 
         // go and square up against the top-left angled wall
-        translate(16, deg_to_rad(90), 1.40);
-        rotate(deg_to_rad(145), 0.60);
+        translate(13, deg_to_rad(90), 1.60);
+        sleep(0.1);
+        rotate(deg_to_rad(130), 0.60);
         translate(5, deg_to_rad(270), 0.60);
         translate_time(0.5, deg_to_rad(270), 0.70);
 
@@ -853,15 +797,13 @@ int main() {
         // bring the axis of the motor in line with the axis of the
         // handle
         translate_time(0.5, deg_to_rad(180), 0.60);
-        rotate(deg_to_rad(15), -0.30);
-        translate(0.5, deg_to_rad(0), 0.40);
+        rotate(deg_to_rad(15), -0.60);
+        translate(0.75, deg_to_rad(0), 0.40);
 
         // bring the arm (and lever) up
         s1.set_angle(deg_to_rad(20));
-        translate_time(0.25, deg_to_rad(90), 0.40);
-        sleep(0.50);
-        s1.set_angle(deg_to_rad(90));
         sleep(0.25);
+        s1.set_angle(deg_to_rad(90));
         translate(2, deg_to_rad(90), 0.70);
 
         // --------- final button ---------
@@ -872,7 +814,7 @@ int main() {
         translate(12, deg_to_rad(90), 1.40);
         translate(8.5, deg_to_rad(180), 1.40);
         translate(20, deg_to_rad(90), 1.40);
-        translate(8, deg_to_rad(110), 1.40);
+        translate(8, deg_to_rad(115), 1.40);
 
         // now the robot is down the ramp
         translate_time(3, deg_to_rad(90), 0.60);
