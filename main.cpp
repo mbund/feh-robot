@@ -535,7 +535,7 @@ void cds_wait() {
     LOG_INFO("waiting for cds");
 
     constexpr auto RED_VALUE = 0.3;
-    constexpr auto TIMEOUT_SEC = 30;
+    constexpr auto TIMEOUT_SEC = 40;
 
     auto timeout = TimeNow();
     auto val = cds.Value();
@@ -555,18 +555,26 @@ void cds_wait() {
 void touch_wait() {
     LOG_INFO("waiting for top touch");
 
+    constexpr auto HOLD_SEC = 1.0;
+
+    double t_start = 0;
     float touch_x;
     float touch_y;
     while (true) {
-        bool touch_pressed = LCD.Touch(&touch_x, &touch_y);
-        if (touch_pressed && touch_y < 100)
+        auto touch_pressed = LCD.Touch(&touch_x, &touch_y);
+
+        if (touch_pressed && t_start == 0)
+            t_start = TimeNow();
+        if (!touch_pressed || touch_y >= 100)
+            t_start = 0;
+        if (t_start != 0 && TimeNow() >= t_start + HOLD_SEC)
             break;
 
         IDLE();
     }
 
     set_font_color(GREEN);
-    LCD.DrawCircle(LCD_WIDTH / 2.0, LCD_HEIGHT / 2.0, 5);
+    LCD.FillCircle(LCD_WIDTH / 2.0, LCD_HEIGHT / 2.0, 50);
 
     LOG_INFO("got touch");
 }
@@ -612,7 +620,7 @@ void sleep(double duration) {
 void ticket_kiosk() {
     constexpr auto RED_VALUE = 0.4;
     constexpr auto BLUE_VALUE = 1.2;
-    constexpr auto TIMEOUT_SEC = 5;
+    constexpr auto TIMEOUT_SEC = 2;
 
     auto timeout = TimeNow();
     while (true) {
@@ -624,7 +632,7 @@ void ticket_kiosk() {
             translate(11, deg_to_rad(180), 0.60);
 
             translate_time(0.5, deg_to_rad(270), 0.70);
-            translate(1.5, deg_to_rad(90), 0.30);
+            translate(1.75, deg_to_rad(90), 0.30);
 
             break;
         } else if ((val > RED_VALUE && val < BLUE_VALUE) ||
@@ -634,7 +642,7 @@ void ticket_kiosk() {
             translate(5, deg_to_rad(180), 0.60);
 
             translate_time(0.5, deg_to_rad(270), 0.70);
-            translate(1.5, deg_to_rad(90), 0.30);
+            translate(1.75, deg_to_rad(90), 0.30);
 
             translate(5, deg_to_rad(180), 0.60);
 
@@ -656,7 +664,7 @@ void fuel_lever() {
         LOG_INFO("got rps lever " << lever);
 
         if (lever == LEVER_A) {
-            translate(0.5, deg_to_rad(180), 0.90);
+            translate(0.75, deg_to_rad(180), 0.90);
             rotate(deg_to_rad(170), 0.50);
             translate(1, deg_to_rad(90), 0.90);
             s1.set_angle(deg_to_rad(180));
@@ -699,7 +707,7 @@ void fuel_lever() {
 
         if (lever == LEVER_B) {
             translate(3.5, deg_to_rad(177), 0.90);
-            rotate(deg_to_rad(215), 0.50);
+            rotate(deg_to_rad(218), 0.50);
             s1.set_angle(deg_to_rad(180));
             sleep(0.5);
             translate(1.75, deg_to_rad(270), 0.90);
@@ -709,7 +717,7 @@ void fuel_lever() {
             s1.set_angle(deg_to_rad(90));
             sleep(0.5);
             translate(2, deg_to_rad(270), 0.90);
-            rotate(deg_to_rad(215), -0.50);
+            rotate(deg_to_rad(218), -0.50);
 
             break;
         }
@@ -737,17 +745,17 @@ int main() {
 
         // --------- fuel lever ---------
         // navigate from starting point to fuel lever
-        translate(8.25, deg_to_rad(90), 0.80);
+        translate(8, deg_to_rad(90), 0.80);
         sleep(0.1);
         translate(16.5, deg_to_rad(180), 1.00);
 
         fuel_lever();
 
         // go up the ramp and square up against the left wall
-        translate(22, deg_to_rad(90), 1.20);
+        translate(23, deg_to_rad(90), 1.20);
         rotate(deg_to_rad(65), 0.60);
         translate_time(1.5, deg_to_rad(270), 0.70);
-        translate(10, deg_to_rad(90), 0.70);
+        translate(9.5, deg_to_rad(90), 0.70);
         rotate(deg_to_rad(90), -0.60);
 
         // --------- luggage ---------
@@ -766,10 +774,9 @@ int main() {
         sleep(0.25);
         s2.set_angle(deg_to_rad(90));
 
-        // // square up against luggage wall again
+        // rotate around to go straight towards the ticket kiosk
         translate(2, deg_to_rad(120), 0.60);
         rotate(deg_to_rad(60), -0.3);
-        // translate_time(1.0, deg_to_rad(270), 0.70);
 
         // go and square up against the top-left angled wall
         translate(9.0, deg_to_rad(90), 1.60);
@@ -802,9 +809,8 @@ int main() {
 
         // bring the arm (and lever) up
         s1.set_angle(deg_to_rad(20));
-        sleep(0.25);
-        s1.set_angle(deg_to_rad(90));
-        translate(2, deg_to_rad(90), 0.70);
+        sleep(0.5);
+        s1.set_angle(deg_to_rad(40));
 
         // --------- final button ---------
         // move away from passport stamp
@@ -812,12 +818,16 @@ int main() {
 
         // navigate down the ramp and hit the button
         translate(12, deg_to_rad(90), 1.40);
+        sleep(0.1);
         translate(8.5, deg_to_rad(180), 1.40);
-        translate(20, deg_to_rad(90), 1.40);
-        translate(8, deg_to_rad(115), 1.40);
+        sleep(0.1);
+        translate(20, deg_to_rad(85), 1.40);
+        sleep(0.1);
+        translate(10, deg_to_rad(90), 1.40);
 
         // now the robot is down the ramp
         translate_time(3, deg_to_rad(90), 0.60);
         translate_time(5, deg_to_rad(180), 0.60);
+        translate_time(5, deg_to_rad(0), 0.60);
     }
 }
