@@ -821,7 +821,7 @@ int main() {
         sleep(0.1);
         translate(8.5, deg_to_rad(180), 1.40);
         sleep(0.1);
-        translate(20, deg_to_rad(85), 1.40);
+        translate(20, deg_to_rad(75), 1.40);
         sleep(0.1);
         translate(10, deg_to_rad(90), 1.40);
 
