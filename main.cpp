@@ -618,7 +618,7 @@ void sleep(double duration) {
 
 /// Ticket kiosk task
 void ticket_kiosk() {
-    constexpr auto RED_VALUE = 0.4;
+    constexpr auto RED_VALUE = 0.35;
     constexpr auto BLUE_VALUE = 1.2;
     constexpr auto TIMEOUT_SEC = 2;
 
@@ -686,8 +686,8 @@ void fuel_lever() {
         }
 
         if (lever == LEVER_A1) {
-            translate(3.4, deg_to_rad(177), 0.90);
-            rotate(deg_to_rad(190), 0.50);
+            translate(3.4, deg_to_rad(180), 0.90);
+            rotate(deg_to_rad(185), 0.50);
             // translate(1, deg_to_rad(90), 0.90);
             s1.set_angle(deg_to_rad(180));
             sleep(0.5);
@@ -700,13 +700,13 @@ void fuel_lever() {
             translate(1.75, deg_to_rad(270), 0.90);
 
             // go to the same ending position as the other levers
-            rotate(deg_to_rad(180), -0.50);
+            rotate(deg_to_rad(185), -0.50);
 
             break;
         }
 
         if (lever == LEVER_B) {
-            translate(3.5, deg_to_rad(177), 0.90);
+            translate(3.5, deg_to_rad(180), 0.90);
             rotate(deg_to_rad(218), 0.50);
             s1.set_angle(deg_to_rad(180));
             sleep(0.5);
@@ -746,8 +746,8 @@ int main() {
         // --------- fuel lever ---------
         // navigate from starting point to fuel lever
         translate(8, deg_to_rad(90), 0.80);
-        sleep(0.1);
-        translate(16.5, deg_to_rad(180), 1.00);
+        sleep(0.2);
+        translate(16.5, deg_to_rad(185), 1.00);
 
         fuel_lever();
 
@@ -821,13 +821,10 @@ int main() {
         sleep(0.1);
         translate(8.5, deg_to_rad(180), 1.40);
         sleep(0.1);
-        translate(20, deg_to_rad(75), 1.40);
-        sleep(0.1);
-        translate(10, deg_to_rad(90), 1.40);
+        translate(28, deg_to_rad(75), 1.40);
 
         // now the robot is down the ramp
         translate_time(3, deg_to_rad(90), 0.60);
-        translate_time(5, deg_to_rad(180), 0.60);
-        translate_time(5, deg_to_rad(0), 0.60);
+        translate_time(3, deg_to_rad(0), 0.60);
     }
 }
